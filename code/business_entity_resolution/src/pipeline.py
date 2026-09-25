@@ -4,6 +4,7 @@
   python -m src.pipeline predict --data-dir ../../student_resource/dataset --work-dir ../../work --out ../../output
 """
 import argparse
+import gc
 import json
 import os
 import time
@@ -56,6 +57,44 @@ def build_pairs(s1, dall, n_jobs, k=20, keep=15):
         cand = pd.concat(parts, ignore_index=True)
         log(f"country={c}: {len(s1c):,} S1, {len(cand):,} candidate pairs")
         out.append(compute_features(cand, s1, dall))
+    return pd.concat(out, ignore_index=True)
+
+
+def score_pairs_streaming(s1, dall, model, cal, n_jobs, k=20, keep=15):
+    """Like build_pairs, but scores and drops each country's full feature matrix before
+    moving to the next one, so peak memory tracks one country instead of every country's
+    pairs held simultaneously (the OOM risk on the full test set)."""
+    out = []
+    for c, s1c in s1.groupby("country"):
+        parts = []
+        for src in (2, 3):
+            dc = dall[(dall.country == c) & (dall.src == src)]
+            if dc.empty:
+                continue
+            cand = gen_candidates(s1c.reset_index(drop=True), dc.reset_index(drop=True),
+                                  k_addr=k, k_name=k, keep=keep, n_jobs=n_jobs)
+            if cand.empty:
+                continue
+            cand["s1_pos"] = s1c.index.values[cand["s1_pos"].values]
+            cand["d_pos"] = dc.index.values[cand["d_pos"].values]
+            parts.append(cand)
+        if not parts:
+            continue
+        cand = pd.concat(parts, ignore_index=True)
+        del parts
+        log(f"country={c}: {len(s1c):,} S1, {len(cand):,} candidate pairs")
+        feats = compute_features(cand, s1, dall)
+        del cand
+        X = feats[list(FEATURE_COLS)].astype(np.float32)
+        raw = model.predict_proba(X)[:, 1]
+        del X
+        prob = cal.predict(raw)
+        minimal = feats[["s1_pos", "d_pos"]].copy()
+        minimal["prob"] = prob
+        del feats, raw, prob
+        gc.collect()
+        log(f"country={c}: scored")
+        out.append(minimal)
     return pd.concat(out, ignore_index=True)
 
 
@@ -163,9 +202,7 @@ def cmd_predict(a):
         s1 = s1.iloc[:a.limit_s1]
     s1, d = prepare(s1, a.jobs), prepare(d, a.jobs)
     log(f"test: {len(s1):,} S1, {len(d):,} S2/S3; countries={sorted(s1.country.unique())}")
-    pairs = build_pairs(s1, d, a.jobs)
-    raw = bundle["model"].predict_proba(pairs[FEATURE_COLS])[:, 1]
-    pairs["prob"] = bundle["cal"].predict(raw)
+    pairs = score_pairs_streaming(s1, d, bundle["model"], bundle["cal"], a.jobs)
     s1_ids, d_ids = s1.entity_id.values, d.entity_id.values
 
     cands = to_lists(pairs, s1_ids, d_ids)

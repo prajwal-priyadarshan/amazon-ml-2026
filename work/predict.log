@@ -1,0 +1,8 @@
+[11:22:51] test: 1,732,544 S1, 9,969,589 S2/S3; countries=['France', 'India', 'US']
+[11:24:31] country=France: 259,452 S1, 7,776,868 candidate pairs
+[11:25:50] country=France: scored
+[11:36:33] country=India: 809,986 S1, 24,296,069 candidate pairs
+[11:41:52] country=India: scored
+[11:48:22] country=US: 663,106 S1, 19,892,761 candidate pairs
+[11:51:57] country=US: scored
+[11:56:42] wrote ../../output: 1,597,604/1,732,544 S1 with >=1 match (train prior ~94%)

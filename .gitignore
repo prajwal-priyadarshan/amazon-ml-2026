@@ -1,1 +1,3 @@
 student_resource/
+output/candidate_pairs.tsv
+output_dry/candidate_pairs.tsv
