@@ -6,6 +6,7 @@ with data-driven aliases from ``learn_aliases.py`` (loaded from the path in the
 ``ER_ALIASES`` environment variable).
 """
 import json
+import math
 import os
 import re
 import unicodedata
@@ -30,6 +31,7 @@ ADDR_CANON = {
     "bd": "blvd", "drive": "dr", "lane": "ln", "court": "ct", "circle": "cir",
     "highway": "hwy", "parkway": "pkwy", "place": "pl", "terrace": "ter",
     "r": "rue", "square": "sq", "suite": "ste",
+    "ch": "chemin", "all": "allee", "imp": "impasse", "rte": "route", "fbg": "faubourg",
 }
 ADDR_DROP = {
     "unit", "ste", "apt", "flr", "floor", "room", "no", "number", "nr", "near",
@@ -45,7 +47,11 @@ _ALNUM = re.compile(r"[a-z0-9]+")
 _SPLIT = re.compile(r"[a-z]+|\d+")
 _LEET = str.maketrans("013457", "oleass")
 
+_HANDLE = re.compile(r"(^|\s)[#@]\w|www\.")
+
 _ALIASES = {}
+_VOCAB = {}
+_VTOTAL = 1.0
 
 
 def load_aliases(path):
@@ -57,6 +63,53 @@ def load_aliases(path):
 
 
 load_aliases(os.environ.get("ER_ALIASES"))
+
+
+def load_vocab(path):
+    """Word counts from clean S1 names; used only to split glued names like suzygillenpeak.com."""
+    global _VOCAB, _VTOTAL
+    if path and os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            _VOCAB = json.load(f)
+        _VTOTAL = float(sum(_VOCAB.values())) + 1.0
+    return len(_VOCAB)
+
+
+load_vocab(os.environ.get("ER_VOCAB"))
+
+
+def segment(tok, maxlen=20):
+    """Viterbi word segmentation over known vocabulary words only; returns [tok] if not splittable."""
+    if not _VOCAB or len(tok) < 8:
+        return [tok]
+    n = len(tok)
+    best, back = [0.0] + [math.inf] * n, [0] * (n + 1)
+    for i in range(1, n + 1):
+        for j in range(max(0, i - maxlen), i):
+            c = _VOCAB.get(tok[j:i])
+            if c is None or best[j] == math.inf or i - j < 3:  # pieces of 1-2 letters cause bad splits
+                continue
+            cost = best[j] - math.log(c / _VTOTAL) + 3.0  # per-word penalty: prefer fewer words
+            if cost < best[i]:
+                best[i], back[i] = cost, j
+    if best[n] == math.inf:
+        return [tok]
+    out, i = [], n
+    while i > 0:
+        out.append(tok[back[i]:i])
+        i = back[i]
+    out.reverse()
+    return out if len(out) > 1 else [tok]
+
+
+def build_vocab(names, min_count=3):
+    from collections import Counter
+    c = Counter()
+    for n in names:
+        for t in norm_name(n)[0].split():
+            if t.isalpha() and len(t) >= 2:
+                c[t] += 1
+    return {w: k for w, k in c.items() if k >= min_count}
 
 
 def _fold(s):
@@ -73,10 +126,13 @@ def norm_name(raw):
     native = _has_native(s)
     s = _fold(s).replace("&", " and ")
     s = _DOT3.sub(r"\1\2\3", s)
+    glued = bool(_TLD.search(s) or _HANDLE.search(s))  # domain / handle / hashtag names lose their spaces
     s = _TLD.sub(" ", s)
     s = _STORE.sub(" ", s)
     toks = []
     for t in _ALNUM.findall(s):
+        if t == "www":
+            continue
         if t.isdigit():
             if len(t) >= 7:  # phone number
                 continue
@@ -90,6 +146,11 @@ def norm_name(raw):
                 toks.append(t.translate(_LEET))
             else:
                 toks.extend(_SPLIT.findall(t))
+    if glued and _VOCAB:
+        exp = []
+        for t in toks:
+            exp.extend(segment(t) if t.isalpha() and len(t) >= 8 and t not in _VOCAB else [t])
+        toks = exp
     if toks and toks[0] == "the":
         toks = toks[1:]
     legal = sorted({LEGAL_CANON[t] for t in toks if t in LEGAL_CANON})

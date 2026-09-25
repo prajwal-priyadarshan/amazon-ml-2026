@@ -19,15 +19,20 @@ HistGradientBoosting automatically.)
 python -m src.learn_aliases --data-dir ../../student_resource/dataset --out ../../work/aliases.json
 #    open the JSON and delete any wrong entries before using it
 
-# 2. train on a 25% cluster-consistent sample of train, tune decision rule, report held-out F0.5
+# 2. preprocess once: normalise train + test, cache as parquet in ../../work/prep (inspect_*.tsv = cleaned samples per country)
+python -m src.pipeline preprocess --data-dir ../../student_resource/dataset --work-dir ../../work \
+    --aliases ../../work/aliases.json --jobs 16
+#    train/predict load this cache automatically; pass the same --aliases (or none) to all three commands
+
+# 3. train on a 25% cluster-consistent sample of train, tune decision rule, report held-out F0.5
 python -m src.pipeline train --data-dir ../../student_resource/dataset --work-dir ../../work \
     --aliases ../../work/aliases.json --frac 0.25 --jobs 16
 
-# 3. predict the full test set and write both TSVs
+# 4. predict the full test set and write both TSVs
 python -m src.pipeline predict --data-dir ../../student_resource/dataset --work-dir ../../work \
     --out ../../output --jobs 16
 
-# 4. validate
+# 5. validate
 python3 ../../student_resource/utils/validate_submission.py \
     --matching ../../output/matching_results.tsv --candidate ../../output/candidate_pairs.tsv \
     --test-dir ../../student_resource/dataset/test
@@ -38,15 +43,21 @@ Use `--limit-s1 5000` on either command for a quick dry run.
 | File | Role |
 |---|---|
 | `src/textnorm.py` | Name/address normalisation (latin fold, legal-suffix split, leetspeak/URL/junk cleanup, abbreviation + learned aliases) |
-| `src/retrieval.py` | Address TF-IDF, name char-n-gram TF-IDF and exact name-key views, rank fusion |
-| `src/features.py` | rapidfuzz, number, legal-suffix and group-competition features |
+| `src/retrieval.py` | Address-word TF-IDF, name and address letter-chunk TF-IDF, exact name key and reverse (S2/S3 -> S1) retrieval, rank fusion |
+| `src/features.py` | rapidfuzz, number (incl. digit edit distance), truncation/extra-word, legal-suffix and competition features; stage-2 features built from stage-1 probabilities |
 | `src/decision.py` | one-owner rule, global threshold, Monte-Carlo expected-F0.5 selection |
 | `src/metric.py` | exact macro F0.5 |
 | `src/learn_aliases.py` | data-driven alias mining |
 | `src/pipeline.py` | `train` / `predict` CLI |
 
+## Model
+Stage 1 GBDT on pair features -> stage 2 GBDT that re-scores each pair using its competitors' stage-1 probabilities
+(rank within S1, margin over the runner-up S1 for the same record, counts of confident candidates) -> isotonic
+calibration -> one-owner rule -> threshold or expected-F0.5. `train` reports stage-1 and stage-2 held-out F0.5 and keeps the better one.
+Speed knobs: `--k-rev 0 --k-addrc 0` turn off the two extra retrieval views; `--k`, `--keep` set the shortlist size.
+`preprocess` also builds `work/vocab.json` (word counts from clean S1 names) used to split glued names such as `suzygillenpeak.com`.
+
 ## Known limitations (planned next)
-- The competition features only see S1 entities that retrieved a record (no reverse S2/S3 -> S1 retrieval yet).
 - Native-script names are only handled through romanisation; the multilingual encoder + cross-encoder is the next step.
 - The training universe is a subsample, so hard negatives are sparser than in the full data; expect the real
   leaderboard score to be below the held-out number.

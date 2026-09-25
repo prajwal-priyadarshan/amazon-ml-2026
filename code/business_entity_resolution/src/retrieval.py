@@ -47,6 +47,9 @@ def _vec(kind, texts_d, texts_q, cap):
     if kind == "addr":
         v = TfidfVectorizer(analyzer="word", ngram_range=(1, 2), token_pattern=r"\S+", min_df=1,
                             max_df=cap, sublinear_tf=True, dtype=np.float32)
+    elif kind == "addrc":  # letter chunks: catches glued/misspelt words such as newyork, sykesvlle
+        v = TfidfVectorizer(analyzer="char_wb", ngram_range=(4, 4), min_df=2, max_df=cap,
+                            sublinear_tf=True, dtype=np.float32)
     else:
         v = TfidfVectorizer(analyzer="char_wb", ngram_range=(3, 4), min_df=2, max_df=cap,
                             sublinear_tf=True, dtype=np.float32)
@@ -72,32 +75,44 @@ def key_pairs(s1, d, cap=30):
     return m
 
 
-def gen_candidates(s1, d, k_addr=20, k_name=20, keep=15, n_jobs=-1):
+def gen_candidates(s1, d, k_addr=20, k_name=20, k_addrc=10, k_rev=5, keep=15, n_jobs=-1):
     """Candidates for S1 rows against one country's slice of one source.
 
-    Returns DataFrame[s1_pos, d_pos, rank_addr, rank_name, in_key, cos_addr, cos_name, rrf]
-    limited to the ``keep`` best-fused candidates per S1 row.
+    Views: address words, name letter-chunks, address letter-chunks (k_addrc, 0 = off), exact name key,
+    and reverse retrieval (each S2/S3 record's top ``k_rev`` S1 rows by address, 0 = off).
+    Returns DataFrame[s1_pos, d_pos, rank_*, in_key, cos_*, rrf] with the ``keep`` best-fused rows per S1.
     """
     if len(s1) == 0 or len(d) == 0:
         return pd.DataFrame()
     cap = max(50, int(0.0015 * len(d)))
     Qa, Da = _vec("addr", d["addr_norm"].values, s1["addr_norm"].values, cap)
     Qn, Dn = _vec("name", d["name_lat"].values, s1["name_lat"].values, cap)
+    views = [("addr", Qa, Da, k_addr), ("name", Qn, Dn, k_name)]
+    if k_addrc:
+        Qc, Dc = _vec("addrc", d["addr_norm"].values, s1["addr_norm"].values, cap)
+        views.append(("addrc", Qc, Dc, k_addrc))
     frames = []
-    for name, Q, D, k in (("addr", Qa, Da, k_addr), ("name", Qn, Dn, k_name)):
+    for name, Q, D, k in views:
         idx, sc = topk_sparse(Q, D, min(k, D.shape[0]), n_jobs=n_jobs)
         frames.append(_ranks_to_frame(idx, sc, name))
+    if k_rev:
+        idx, sc = topk_sparse(Da, Qa, min(k_rev, Qa.shape[0]), n_jobs=n_jobs)
+        frames.append(_ranks_to_frame(idx, sc, "rev").rename(columns={"s1_pos": "d_pos", "d_pos": "s1_pos"}))
     frames.append(key_pairs(s1, d))
     cand = frames[0]
     for f in frames[1:]:
         cand = cand.merge(f, on=["s1_pos", "d_pos"], how="outer")
     cand["in_key"] = cand["in_key"].fillna(0).astype("int8")
-    ra = cand["rank_addr"].fillna(1e6)
-    rn = cand["rank_name"].fillna(1e6)
-    cand["rrf"] = 1 / (RRF_K + ra) + 1 / (RRF_K + rn) + 0.01 * cand["in_key"]
+    for col in ("rank_addr", "rank_name", "rank_addrc", "rank_rev"):
+        if col not in cand:
+            cand[col] = np.nan
+    cand["rrf"] = 0.01 * cand["in_key"]
+    for col in ("rank_addr", "rank_name", "rank_addrc", "rank_rev"):
+        cand["rrf"] += 1 / (RRF_K + cand[col].fillna(1e6))
     cand = cand.sort_values(["s1_pos", "rrf"], ascending=[True, False])
     cand = cand.groupby("s1_pos", sort=False).head(keep).reset_index(drop=True)
     qi, di = cand.s1_pos.values, cand.d_pos.values
     cand["cos_addr"] = pair_cos(Qa, Da, qi, di)
     cand["cos_name"] = pair_cos(Qn, Dn, qi, di)
+    cand["cos_addrc"] = pair_cos(Qc, Dc, qi, di) if k_addrc else np.float32(np.nan)
     return cand
