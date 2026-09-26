@@ -16,7 +16,7 @@ from . import textnorm
 from .data import read_ground_truth, read_source
 from .decision import to_lists
 from .metric import f05_single, macro_f05
-from .pipeline import concat_sources, decide, log, prepare, score_all
+from .pipeline import EnsembleModel, concat_sources, decide, log, prepare, score_all
 
 
 def main():

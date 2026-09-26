@@ -110,7 +110,8 @@ def compute_features(cand, s1, dall, chunk=2_000_000):
 def add_group_features(df):
     """Retrieval-side competition among the S1 rows that retrieved the same S2/S3 record.
     Runs on the lean candidate frame (no fuzzy columns needed)."""
-    df["sim"] = df["cos_addr"] + df["cos_name"] + df["cos_nword"] + df["cos_skel"]
+    emb_sim = df["cos_emb"] if "cos_emb" in df.columns else 0.0
+    df["sim"] = df["cos_addr"] + df["cos_name"] + df["cos_nword"] + df["cos_skel"] + emb_sim
     o = df.sort_values(["d_pos", "sim"], ascending=[True, False])
     r = o.groupby("d_pos").cumcount()
     best = o["sim"].where(r == 0).groupby(o["d_pos"]).transform("max")
@@ -152,8 +153,8 @@ def add_stage2_features(df, prob_col="prob1"):
     return df
 
 
-RETRIEVAL_COLS = ["rank_addr", "rank_name", "rank_nword", "rank_skel", "in_key", "in_skel",
-                  "cos_addr", "cos_name", "cos_nword", "cos_skel", "rrf"]
+RETRIEVAL_COLS = ["rank_addr", "rank_name", "rank_nword", "rank_skel", "rank_emb", "in_key", "in_skel",
+                  "cos_addr", "cos_name", "cos_nword", "cos_skel", "cos_emb", "rrf"]
 GROUP_COLS = ["sim", "rec_best", "rec_n", "rec_margin", "s1_rank", "s1_best", "s1_gap"]
 PAIR_COLS = (list(FUZZ) + list(LOOP_COLS)
              + ["legal_eq", "legal_conflict", "key_eq", "skel_eq", "len_ratio", "len_absdiff",

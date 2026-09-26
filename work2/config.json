@@ -1,10 +1,10 @@
 {
  "mode": "threshold",
- "thr": 0.7,
- "margin": 0.0,
- "heldout_f05": 0.9561907877424835,
- "blocking_recall": 0.9531083168262472,
- "aliases": "../../work2/aliases.json",
+ "thr": 0.85,
+ "margin": 0.2,
+ "heldout_f05": 0.9574736794587909,
+ "blocking_recall": 0.9525506157107005,
+ "aliases": null,
  "k": 30,
  "keep": 60
 }

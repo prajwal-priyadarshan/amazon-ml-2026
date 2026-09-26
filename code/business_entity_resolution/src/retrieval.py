@@ -28,10 +28,10 @@ def _topk_chunk(Q, DT, s, e, k):
     return idx, sc
 
 
-def topk_sparse(Q, D, k, chunk=500, n_jobs=-1):
+def topk_sparse(Q, D, k, chunk=2_500, n_jobs=-1):
     DT = D.T.tocsr()
     spans = [(s, min(s + chunk, Q.shape[0])) for s in range(0, Q.shape[0], chunk)]
-    res = Parallel(n_jobs=n_jobs)(delayed(_topk_chunk)(Q, DT, s, e, k) for s, e in spans)
+    res = Parallel(n_jobs=n_jobs, batch_size=1)(delayed(_topk_chunk)(Q, DT, s, e, k) for s, e in spans)
     return np.vstack([r[0] for r in res]), np.vstack([r[1] for r in res])
 
 
@@ -79,16 +79,25 @@ def key_pairs(s1, d, col="name_key", flag="in_key", cap=50):
     return m
 
 
-def gen_candidates(s1, d, k_addr=30, k_name=30, keep=30, n_jobs=-1):
+def _get_dense_embeddings(texts, model_name="all-MiniLM-L6-v2", batch_size=512):
+    """Compute normalized dense embeddings using sentence-transformers if available."""
+    try:
+        from sentence_transformers import SentenceTransformer
+        import torch
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model = SentenceTransformer(model_name, device=device)
+        embeddings = model.encode(texts, batch_size=batch_size, show_progress_bar=False, normalize_embeddings=True)
+        return embeddings.astype(np.float32)
+    except Exception:
+        return None
+
+
+def gen_candidates(s1, d, k_addr=30, k_name=30, keep=30, n_jobs=-1, use_dense=True):
     """Candidates for S1 rows against one country's slice of one source.
 
-    Five complementary views, so a variation that defeats one is still caught by another:
-    address word TF-IDF, name char n-grams, name word TF-IDF, exact name key and exact
-    phonetic skeleton. Candidate recall is the hard ceiling on the final score, so this
-    deliberately over-retrieves and lets the model do the discriminating.
-
-    Returns DataFrame[s1_pos, d_pos, rank_addr, rank_name, rank_nword, in_key, in_skel,
-    cos_addr, cos_name, cos_nword, rrf] limited to the ``keep`` best-fused per S1 row.
+    Six complementary views:
+    address word TF-IDF, name char n-grams, name word TF-IDF, exact name key, exact
+    phonetic skeleton, and dense sentence-transformer embeddings (if sentence_transformers is installed).
     """
     if len(s1) == 0 or len(d) == 0:
         return pd.DataFrame()
@@ -96,8 +105,7 @@ def gen_candidates(s1, d, k_addr=30, k_name=30, keep=30, n_jobs=-1):
     Qa, Da = _vec("addr", d["addr_norm"].values, s1["addr_norm"].values, cap)
     Qn, Dn = _vec("name", d["name_lat"].values, s1["name_lat"].values, cap)
     Qw, Dw = _vec("nword", d["name_core"].values, s1["name_core"].values, cap)
-    # Phonetic view: the only view that reliably survives romanised Indic text, where the
-    # transliterated form shares few raw character n-grams with its English counterpart.
+    # Phonetic view: the only view that reliably survives romanised Indic text
     Qp, Dp = _vec("name", d["name_skel"].values, s1["name_skel"].values, cap)
     frames = []
     for name, Q, D, k in (("addr", Qa, Da, k_addr), ("name", Qn, Dn, k_name),
@@ -106,6 +114,27 @@ def gen_candidates(s1, d, k_addr=30, k_name=30, keep=30, n_jobs=-1):
         frames.append(_ranks_to_frame(idx, sc, name))
     frames.append(key_pairs(s1, d, "name_key", "in_key"))
     frames.append(key_pairs(s1, d, "name_skel", "in_skel"))
+
+    # Dense Vector Embedding Retrieval (if available)
+    dense_active = False
+    if use_dense and len(s1) <= 150_000 and len(d) <= 1_500_000:
+        s1_texts = (s1["name_lat"] + " " + s1["addr_norm"]).tolist()
+        d_texts = (d["name_lat"] + " " + d["addr_norm"]).tolist()
+        emb_q = _get_dense_embeddings(s1_texts)
+        emb_d = _get_dense_embeddings(d_texts)
+        if emb_q is not None and emb_d is not None:
+            dense_active = True
+            # Compute top-k nearest neighbors per S1 query
+            k_dense = min(k_name, emb_d.shape[0])
+            import torch
+            t_q = torch.from_numpy(emb_q)
+            t_d = torch.from_numpy(emb_d).t()
+            sims = torch.mm(t_q, t_d)
+            vals, inds = torch.topk(sims, k=k_dense, dim=1)
+            idx_emb = inds.numpy().astype(np.int32)
+            sc_emb = vals.numpy().astype(np.float32)
+            frames.append(_ranks_to_frame(idx_emb, sc_emb, "emb"))
+
     cand = frames[0]
     for f in frames[1:]:
         cand = cand.merge(f, on=["s1_pos", "d_pos"], how="outer")
@@ -115,7 +144,9 @@ def gen_candidates(s1, d, k_addr=30, k_name=30, keep=30, n_jobs=-1):
     rn = cand["rank_name"].fillna(1e6)
     rw = cand["rank_nword"].fillna(1e6)
     rp = cand["rank_skel"].fillna(1e6)
+    remb = cand["rank_emb"].fillna(1e6) if "rank_emb" in cand.columns else 1e6
     cand["rrf"] = (1 / (RRF_K + ra) + 1 / (RRF_K + rn) + 1 / (RRF_K + rw) + 1 / (RRF_K + rp)
+                   + (1 / (RRF_K + remb) if dense_active else 0.0)
                    + 0.01 * cand["in_key"] + 0.01 * cand["in_skel"])
     cand = cand.sort_values(["s1_pos", "rrf"], ascending=[True, False])
     if keep:  # keep=0 returns the full union, i.e. the recall ceiling of this view set
@@ -127,6 +158,11 @@ def gen_candidates(s1, d, k_addr=30, k_name=30, keep=30, n_jobs=-1):
     cand["cos_name"] = pair_cos(Qn, Dn, qi, di)
     cand["cos_nword"] = pair_cos(Qw, Dw, qi, di)
     cand["cos_skel"] = pair_cos(Qp, Dp, qi, di)
-    for c in ("rank_addr", "rank_name", "rank_nword", "rank_skel"):
-        cand[c] = cand[c].fillna(1e6).astype(np.float32)
+    cand["cos_emb"] = 0.0 if not dense_active else np.zeros(len(cand), dtype=np.float32)
+    for c in ("rank_addr", "rank_name", "rank_nword", "rank_skel", "rank_emb"):
+        if c in cand.columns:
+            cand[c] = cand[c].fillna(1e6).astype(np.float32)
+        else:
+            cand[c] = np.float32(1e6)
     return cand
+

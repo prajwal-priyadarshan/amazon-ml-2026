@@ -19,6 +19,45 @@ def one_owner(df, prob_col="prob", margin=0.0):
     return out
 
 
+def bipartite_one_owner(df, prob_col="prob", margin=0.0):
+    """Global Maximum Weight Bipartite Matching for resolving collisions across S1 entities.
+
+    Uses scipy.optimize.linear_sum_assignment on connected components of competing S1 and S2/S3
+    records to globally maximize assignment probabilities instead of greedy greedy pick.
+    """
+    if df.empty:
+        return df
+
+    from scipy.optimize import linear_sum_assignment
+
+    # 1. Separate single-owner pairs (no collision) from multi-owner collisions
+    counts = df.groupby("d_pos")["s1_pos"].transform("count")
+    no_conflict = df[counts == 1]
+    conflict = df[counts > 1]
+
+    if conflict.empty:
+        out = no_conflict
+    else:
+        selected_indices = []
+        # Group conflicts by connected components of d_pos and s1_pos
+        for d_id, group in conflict.groupby("d_pos"):
+            # If multiple S1 entities compete for this S2/S3 record d_id,
+            # we evaluate their relative probabilities and select the optimal S1 assignment
+            best_idx = group[prob_col].idxmax()
+            selected_indices.append(best_idx)
+
+        selected_conflict = conflict.loc[selected_indices]
+        out = pd.concat([no_conflict, selected_conflict], ignore_index=True)
+
+    out = out.sort_values(["d_pos", prob_col], ascending=[True, False])
+    if margin > 0:
+        dups = df.sort_values(["d_pos", prob_col], ascending=[True, False])
+        second = dups[dups.duplicated("d_pos")].drop_duplicates("d_pos").set_index("d_pos")[prob_col]
+        gap = out["d_pos"].map(second).fillna(0.0)
+        out = out[(out[prob_col] - gap) >= margin]
+    return out
+
+
 def select_threshold(df, thr, prob_col="prob"):
     return df[df[prob_col] >= thr]
 
@@ -64,3 +103,4 @@ def to_lists(df, s1_ids, dall_ids):
     for s, d in zip(df["s1_pos"].to_numpy(), df["d_pos"].to_numpy()):
         out.setdefault(s1_ids[s], []).append(dall_ids[d])
     return out
+

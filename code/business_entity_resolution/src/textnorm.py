@@ -197,17 +197,22 @@ def _chunk(args):
     return [norm_name(n) + norm_address(a) for n, a in zip(names, addrs)]
 
 
-def normalize_frame(df, n_jobs=8, chunk=200_000):
+def normalize_frame(df, n_jobs=4, chunk=100_000):
     """Add normalised columns to a source frame. Row order is preserved."""
-    names, addrs = df["business_name"].tolist(), df["business_address"].tolist()
-    parts = [(names[i:i + chunk], addrs[i:i + chunk]) for i in range(0, len(df), chunk)]
-    if n_jobs > 1 and len(parts) > 1:
-        with ProcessPoolExecutor(n_jobs) as ex:
-            res = [r for part in ex.map(_chunk, parts) for r in part]
-    else:
-        res = [r for p in parts for r in _chunk(p)]
+    n = len(df)
+    names = df["business_name"].values
+    addrs = df["business_address"].values
+
+    res = []
+    # In-process batching avoids Windows _ForkingPickler MemoryError on multi-million row frames
+    for s in range(0, n, chunk):
+        e = min(s + chunk, n)
+        bn = names[s:e]
+        ba = addrs[s:e]
+        res.extend(norm_name(bn[i]) + norm_address(ba[i]) for i in range(e - s))
+
     cols = ["name_lat", "name_core", "name_key", "name_skel", "legal", "native", "addr_norm", "nums"]
-    out = pd.DataFrame(res, columns=cols, index=df.index)
+    out = pd.DataFrame(res, columns=cols)
     out["addr_missing"] = (out["addr_norm"] == "").astype("int8")
     out["native"] = out["native"].astype("int8")
-    return pd.concat([df.reset_index(drop=True), out.reset_index(drop=True)], axis=1)
+    return pd.concat([df.reset_index(drop=True), out], axis=1)

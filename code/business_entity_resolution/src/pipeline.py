@@ -147,29 +147,98 @@ def score_all(s1, dall, bundle, n_jobs, k=30, keep=60, cand_sink=None):
     return pd.concat(out, ignore_index=True)
 
 
-def make_model(n_estimators=1200):
+class EnsembleModel:
+    def __init__(self, models):
+        self.models = models
+
+    def predict_proba(self, X):
+        probs = [m.predict_proba(X)[:, 1] for m in self.models]
+        avg_p = np.mean(probs, axis=0)
+        return np.column_stack([1.0 - avg_p, avg_p])
+
+    @property
+    def feature_importances_(self):
+        imps = [getattr(m, "feature_importances_", None) for m in self.models]
+        valid = [i for i in imps if i is not None]
+        return np.mean(valid, axis=0) if valid else None
+
+
+def make_models(n_estimators=1200):
+    models = []
+    has_gpu = False
+    try:
+        import torch
+        has_gpu = torch.cuda.is_available()
+    except Exception:
+        pass
+
+    # 1. LightGBM
     try:
         import lightgbm as lgb
-        return lgb.LGBMClassifier(n_estimators=n_estimators, learning_rate=0.05, num_leaves=127,
-                                  subsample=0.8, subsample_freq=1, colsample_bytree=0.8,
-                                  min_child_samples=50, n_jobs=-1, verbose=-1), True
-    except Exception:  # missing libomp etc.: fall back so the pipeline still runs
+        models.append(("lgb", lgb.LGBMClassifier(n_estimators=n_estimators, learning_rate=0.05, num_leaves=127,
+                                                 subsample=0.8, subsample_freq=1, colsample_bytree=0.8,
+                                                 min_child_samples=50, n_jobs=-1, verbose=-1)))
+    except Exception:
+        pass
+
+    # 2. XGBoost (CUDA GPU if available)
+    try:
+        import xgboost as xgb
+        xgb_kwargs = dict(n_estimators=min(n_estimators, 800), learning_rate=0.05,
+                          max_depth=7, subsample=0.8, colsample_bytree=0.8,
+                          n_jobs=-1, verbosity=0)
+        if has_gpu:
+            xgb_kwargs["tree_method"] = "hist"
+            xgb_kwargs["device"] = "cuda"
+        models.append(("xgb", xgb.XGBClassifier(**xgb_kwargs)))
+    except Exception:
+        pass
+
+    # 3. CatBoost (CUDA GPU if available)
+    try:
+        import catboost as cb
+        cb_kwargs = dict(iterations=min(n_estimators, 600), learning_rate=0.05,
+                          depth=6, verbose=0, thread_count=-1)
+        if has_gpu:
+            cb_kwargs["task_type"] = "GPU"
+        models.append(("cat", cb.CatBoostClassifier(**cb_kwargs)))
+    except Exception:
+        pass
+
+    if not models:
         from sklearn.ensemble import HistGradientBoostingClassifier
-        return HistGradientBoostingClassifier(max_iter=400, learning_rate=0.1, max_leaf_nodes=63), False
+        models.append(("hist", HistGradientBoostingClassifier(max_iter=400, learning_rate=0.1, max_leaf_nodes=63)))
+    return models
 
 
 def fit(X, y, Xv, yv):
-    model, is_lgb = make_model()
-    if is_lgb:
-        import lightgbm as lgb
-        model.fit(X, y, eval_set=[(Xv, yv)], callbacks=[lgb.early_stopping(50, verbose=False)])
-    else:
-        model.fit(X, y)
-    return model
+    raw_models = make_models()
+    fitted = []
+    for name, model in raw_models:
+        try:
+            if name == "lgb":
+                import lightgbm as lgb
+                model.fit(X, y, eval_set=[(Xv, yv)], callbacks=[lgb.early_stopping(50, verbose=False)])
+            elif name == "xgb":
+                model.fit(X, y, eval_set=[(Xv, yv)], verbose=False)
+            elif name == "cat":
+                model.fit(X, y, eval_set=(Xv, yv), early_stopping_rounds=50, verbose=False)
+            else:
+                model.fit(X, y)
+            fitted.append(model)
+        except Exception as ex:
+            log(f"Warning: fitting {name} failed: {ex}")
+    if not fitted:
+        from sklearn.ensemble import HistGradientBoostingClassifier
+        fallback = HistGradientBoostingClassifier(max_iter=400, learning_rate=0.1, max_leaf_nodes=63)
+        fallback.fit(X, y)
+        fitted.append(fallback)
+    return EnsembleModel(fitted)
 
 
-def decide(df, mode, thr, s1_ids, dall_ids, margin=0.0, miss_rate=0.0):
-    own = one_owner(df, margin=margin)
+def decide(df, mode, thr, s1_ids, dall_ids, margin=0.0, miss_rate=0.0, use_bipartite=True):
+    from .decision import bipartite_one_owner, one_owner
+    own = bipartite_one_owner(df, margin=margin) if use_bipartite else one_owner(df, margin=margin)
     sel = select_expected_f05(own, miss_rate=miss_rate) if mode == "expected" else select_threshold(own, thr)
     return to_lists(sel, s1_ids, dall_ids)
 
