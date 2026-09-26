@@ -1,5 +1,27 @@
+# Competition dataset (shipped separately, far too large for git)
 student_resource/
-output/candidate_pairs.tsv
-output_dry/candidate_pairs.tsv
+
+# Generated pipeline artifacts: candidates, scored blocks, models, submissions, logs.
+# All reproducible from src/ plus the dataset, and individually up to 2.5GB.
+work/
+work2/
+work_v2/
+work_dry/
+output/
+output2/
+output_dry/
+
+*.tsv
+*.parquet
+*.joblib
+*.log
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+.venv/
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
