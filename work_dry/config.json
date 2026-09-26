@@ -1,7 +1,0 @@
-{
- "mode": "threshold",
- "thr": 0.7,
- "margin": 0.0,
- "heldout_f05": 0.9918339597672162,
- "aliases": null
-}

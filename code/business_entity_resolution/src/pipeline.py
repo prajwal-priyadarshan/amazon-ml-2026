@@ -86,20 +86,19 @@ def feature_matrix(cand, s1, dall, cols, chunk=1_500_000):
 
 
 def write_candidate_lists(path, s1_ids, d_ids, pairs, header):
-    """Stream candidate lists to disk. Building a dict of id strings for ~100M pairs would
-    cost several GB of Python objects; this keeps only one row's strings alive at a time."""
+    """Write per-S1 id lists for ~200M pairs.
+
+    A Python loop over 1.7M rows joining ids one row at a time measured at 3 MB/min, which
+    is hours for this file. Grouping with pandas keeps the aggregation in native code and
+    the final serialisation in ``to_csv``, which is a different order of magnitude."""
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    sp = pairs["s1_pos"].to_numpy()
-    dp = pairs["d_pos"].to_numpy()
-    order = np.argsort(sp, kind="stable")
-    sp, dp = sp[order], dp[order]
-    starts = np.searchsorted(sp, np.arange(len(s1_ids)), side="left")
-    ends = np.searchsorted(sp, np.arange(len(s1_ids)), side="right")
-    with open(path, "w", encoding="utf-8", newline="") as f:
-        f.write("\t".join(header) + "\n")
-        for i, sid in enumerate(s1_ids):
-            a, b = starts[i], ends[i]
-            f.write(f"{sid}\t{','.join(d_ids[dp[a:b]]) if b > a else ''}\n")
+    df = pd.DataFrame({"s1_pos": pairs["s1_pos"].to_numpy(),
+                       "d_id": pd.Categorical.from_codes(pairs["d_pos"].to_numpy(),
+                                                         categories=pd.Index(d_ids)).astype(str)})
+    joined = df.groupby("s1_pos", sort=True)["d_id"].agg(",".join)
+    out = pd.DataFrame({header[0]: s1_ids,
+                        header[1]: joined.reindex(np.arange(len(s1_ids))).fillna("").to_numpy()})
+    out.to_csv(path, sep="\t", index=False, header=True, lineterminator="\n")
 
 
 def score_candidates(cand, s1, dall, bundle, chunk=1_500_000):
@@ -133,17 +132,42 @@ def score_candidates(cand, s1, dall, bundle, chunk=1_500_000):
     return out
 
 
-def score_all(s1, dall, bundle, n_jobs, k=30, keep=60, cand_sink=None):
-    """Per (country, source): build candidates, score, keep only ids + probability."""
+def score_all(s1, dall, bundle, n_jobs, k=30, keep=60, cand_sink=None, ckpt=None):
+    """Per (country, source): build candidates, score, keep only ids + probability.
+
+    With ``ckpt`` each block is written to disk as soon as it is scored and reloaded on a
+    later run, so an interrupted job resumes at the next block instead of recomputing
+    everything. Blocking + scoring one block costs ~20 minutes, the whole pass ~80."""
     out = []
-    for c, src, n_s1, cand in iter_blocks(s1, dall, n_jobs, k, keep):
-        log(f"country={c} src={src}: {n_s1:,} S1, {len(cand):,} candidate pairs")
-        if cand_sink is not None:
-            cand_sink.append(cand[LEAN])
-        out.append(score_candidates(cand, s1, dall, bundle))
-        del cand
-        gc.collect()
-        log(f"country={c} src={src}: scored")
+    if ckpt:
+        os.makedirs(ckpt, exist_ok=True)
+    for c, s1c in s1.groupby("country"):
+        for src in (2, 3):
+            tag = f"{c}_{src}"
+            sp = f"{ckpt}/scored_{tag}.parquet" if ckpt else None
+            cp = f"{ckpt}/cands_{tag}.parquet" if ckpt else None
+            if sp and os.path.exists(sp) and os.path.exists(cp):
+                out.append(pd.read_parquet(sp))
+                if cand_sink is not None:
+                    cand_sink.append(pd.read_parquet(cp))
+                log(f"country={c} src={src}: loaded from checkpoint")
+                continue
+            cand = block_candidates(s1c, dall, c, src, n_jobs, k, keep)
+            if cand.empty:
+                continue
+            log(f"country={c} src={src}: {len(s1c):,} S1, {len(cand):,} candidate pairs")
+            lean = cand[LEAN]
+            if cp:
+                lean.to_parquet(cp, index=False)
+            if cand_sink is not None:
+                cand_sink.append(lean)
+            scored = score_candidates(cand, s1, dall, bundle)
+            if sp:
+                scored.to_parquet(sp, index=False)
+            out.append(scored)
+            del cand, scored
+            gc.collect()
+            log(f"country={c} src={src}: scored")
     return pd.concat(out, ignore_index=True)
 
 
@@ -312,17 +336,25 @@ def cmd_predict(a):
     log(f"test: {len(s1):,} S1, {len(d):,} S2/S3; countries={sorted(s1.country.unique())}")
 
     sink = []
-    pairs = score_all(s1, d, bundle, a.jobs, cfg.get("k", 30), cfg.get("keep", 30), cand_sink=sink)
+    pairs = score_all(s1, d, bundle, a.jobs, cfg.get("k", 30), cfg.get("keep", 60),
+                      cand_sink=sink, ckpt=a.ckpt or f"{a.work_dir}/blocks")
     s1_ids, d_ids = s1.entity_id.values, d.entity_id.values
+    log(f"all blocks done: {len(pairs):,} scored pairs; writing output")
+
+    # Scored file first: it is the one the leaderboard reads, and it is far smaller.
+    matches = decide(pairs, cfg["mode"], cfg["thr"], s1_ids, d_ids, cfg["margin"])
+    write_id_lists(f"{a.out}/matching_results.tsv", s1_ids, matches, ["source1_entity_id", "matched_entity_ids"])
+    n = sum(1 for v in matches.values() if v)
+    log(f"wrote matching_results.tsv: {n:,}/{len(s1_ids):,} S1 with >=1 match (train prior ~94%)")
+    del pairs, matches
+    gc.collect()
+
     write_candidate_lists(f"{a.out}/candidate_pairs.tsv", s1_ids, d_ids,
                           pd.concat(sink, ignore_index=True),
                           ["source1_entity_id", "candidate_entity_ids"])
     del sink
     gc.collect()
-    matches = decide(pairs, cfg["mode"], cfg["thr"], s1_ids, d_ids, cfg["margin"])
-    write_id_lists(f"{a.out}/matching_results.tsv", s1_ids, matches, ["source1_entity_id", "matched_entity_ids"])
-    n = sum(1 for v in matches.values() if v)
-    log(f"wrote {a.out}: {n:,}/{len(s1_ids):,} S1 with >=1 match (train prior ~94%)")
+    log(f"wrote {a.out}: done")
 
 
 def main():
@@ -341,6 +373,7 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--jobs", type=int, default=8)
     ap.add_argument("--limit-s1", type=int, default=0)
+    ap.add_argument("--ckpt", default=None, help="block checkpoint dir (default <work-dir>/blocks)")
     a = ap.parse_args()
     {"train": cmd_train, "predict": cmd_predict}[a.cmd](a)
 
