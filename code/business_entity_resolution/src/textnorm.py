@@ -6,7 +6,6 @@ with data-driven aliases from ``learn_aliases.py`` (loaded from the path in the
 ``ER_ALIASES`` environment variable).
 """
 import json
-import math
 import os
 import re
 import unicodedata
@@ -26,17 +25,49 @@ LEGAL_CANON = {
 }
 NAME_STOP = {"and", "the", "of", "de", "la", "le", "les", "du", "des", "et"}
 
+# Long form -> canonical short form, so "International"/"Intl" and "Services"/"Svcs" agree.
+# Deliberately country-agnostic: no state names, no postal conventions.
+NAME_CANON = {
+    "international": "intl", "intl": "intl", "natl": "natl", "national": "natl",
+    "manufacturing": "mfg", "manufacturers": "mfg", "manufacturer": "mfg", "mfg": "mfg",
+    "services": "svc", "service": "svc", "svcs": "svc", "svc": "svc",
+    "associates": "assoc", "associate": "assoc", "assoc": "assoc", "assocs": "assoc",
+    "brothers": "bros", "bros": "bros", "management": "mgmt", "mgmt": "mgmt",
+    "technologies": "tech", "technology": "tech", "tech": "tech", "technical": "tech",
+    "industries": "ind", "industrial": "ind", "industry": "ind",
+    "enterprises": "ent", "enterprise": "ent", "entreprise": "ent", "entreprises": "ent",
+    "solutions": "soln", "solution": "soln", "systems": "sys", "system": "sys",
+    "engineering": "engg", "engineers": "engg", "engineer": "engg",
+    "construction": "constr", "constructions": "constr",
+    "development": "dev", "developers": "dev", "developer": "dev",
+    "trading": "trdg", "traders": "trdg", "trader": "trdg",
+    "distributors": "distr", "distributor": "distr", "distribution": "distr",
+    "marketing": "mktg", "agency": "agcy", "agencies": "agcy",
+    "holdings": "hldg", "holding": "hldg", "laboratories": "lab", "laboratory": "lab",
+    "pharmaceuticals": "pharma", "pharmaceutical": "pharma",
+    "products": "prod", "product": "prod", "supplies": "sply", "supply": "sply",
+    "equipments": "equip", "equipment": "equip", "machinery": "mach",
+    "transport": "trans", "transportation": "trans", "logistics": "logi",
+    "consultancy": "cons", "consultants": "cons", "consulting": "cons", "consultant": "cons",
+    "societe": "ste2", "restaurant": "rest", "hospital": "hosp",
+}
+
 ADDR_CANON = {
     "street": "st", "road": "rd", "avenue": "ave", "av": "ave", "boulevard": "blvd",
     "bd": "blvd", "drive": "dr", "lane": "ln", "court": "ct", "circle": "cir",
     "highway": "hwy", "parkway": "pkwy", "place": "pl", "terrace": "ter",
     "r": "rue", "square": "sq", "suite": "ste",
-    "ch": "chemin", "all": "allee", "imp": "impasse", "rte": "route", "fbg": "faubourg",
+    # French street vocabulary (France is zero-shot: it only appears in test).
+    "chemin": "ch", "route": "rte", "allee": "all", "allees": "all",
+    "impasse": "imp", "quai": "qai", "cours": "crs", "faubourg": "fbg",
+    "residence": "res", "batiment": "bat", "zone": "zi", "industrielle": "zi",
 }
 ADDR_DROP = {
     "unit", "ste", "apt", "flr", "floor", "room", "no", "number", "nr", "near",
     "opp", "opposite", "behind", "h", "hn", "hno", "door", "plot", "null", "nan",
     "none", "and",
+    # French articles/prepositions carry no identifying signal ("rue de la Paix").
+    "de", "du", "des", "la", "le", "les", "et", "aux",
 }
 ORDINAL_SUFFIX = {"nd", "rd", "th"}
 
@@ -47,11 +78,7 @@ _ALNUM = re.compile(r"[a-z0-9]+")
 _SPLIT = re.compile(r"[a-z]+|\d+")
 _LEET = str.maketrans("013457", "oleass")
 
-_HANDLE = re.compile(r"(^|\s)[#@]\w|www\.")
-
 _ALIASES = {}
-_VOCAB = {}
-_VTOTAL = 1.0
 
 
 def load_aliases(path):
@@ -65,53 +92,6 @@ def load_aliases(path):
 load_aliases(os.environ.get("ER_ALIASES"))
 
 
-def load_vocab(path):
-    """Word counts from clean S1 names; used only to split glued names like suzygillenpeak.com."""
-    global _VOCAB, _VTOTAL
-    if path and os.path.exists(path):
-        with open(path, encoding="utf-8") as f:
-            _VOCAB = json.load(f)
-        _VTOTAL = float(sum(_VOCAB.values())) + 1.0
-    return len(_VOCAB)
-
-
-load_vocab(os.environ.get("ER_VOCAB"))
-
-
-def segment(tok, maxlen=20):
-    """Viterbi word segmentation over known vocabulary words only; returns [tok] if not splittable."""
-    if not _VOCAB or len(tok) < 8:
-        return [tok]
-    n = len(tok)
-    best, back = [0.0] + [math.inf] * n, [0] * (n + 1)
-    for i in range(1, n + 1):
-        for j in range(max(0, i - maxlen), i):
-            c = _VOCAB.get(tok[j:i])
-            if c is None or best[j] == math.inf or i - j < 3:  # pieces of 1-2 letters cause bad splits
-                continue
-            cost = best[j] - math.log(c / _VTOTAL) + 3.0  # per-word penalty: prefer fewer words
-            if cost < best[i]:
-                best[i], back[i] = cost, j
-    if best[n] == math.inf:
-        return [tok]
-    out, i = [], n
-    while i > 0:
-        out.append(tok[back[i]:i])
-        i = back[i]
-    out.reverse()
-    return out if len(out) > 1 else [tok]
-
-
-def build_vocab(names, min_count=3):
-    from collections import Counter
-    c = Counter()
-    for n in names:
-        for t in norm_name(n)[0].split():
-            if t.isalpha() and len(t) >= 2:
-                c[t] += 1
-    return {w: k for w, k in c.items() if k >= min_count}
-
-
 def _fold(s):
     return unidecode(unicodedata.normalize("NFKC", s)).lower()
 
@@ -120,19 +100,51 @@ def _has_native(s):
     return any(ord(c) > 0x24F for c in s)
 
 
+_VOWELS = str.maketrans("", "", "aeiou")
+# Aspirated/compound digraphs collapse to their base sound. Romanised Indic text is the
+# reason this matters: unidecode renders महाराष्ट्र as "mhaaraassttr", which shares almost
+# no character n-grams with "maharashtra" until both are folded this way.
+_DIGRAPH = (("sh", "s"), ("ch", "c"), ("th", "t"), ("ph", "f"), ("bh", "b"), ("dh", "d"),
+            ("gh", "g"), ("kh", "k"), ("jh", "j"), ("zh", "z"), ("ck", "k"), ("qu", "k"),
+            ("ee", "i"), ("oo", "u"), ("aa", "a"), ("ii", "i"))
+
+
+def _phon(t):
+    """maharashtra -> mhrstr  and  mhaaraassttr -> mhrstr"""
+    for a, b in _DIGRAPH:
+        t = t.replace(a, b)
+    s = t[:1] + t[1:].translate(_VOWELS)
+    out = []
+    for ch in s:
+        if not out or out[-1] != ch:  # collapse doubled consonants
+            out.append(ch)
+    return "".join(out)
+
+
+def _skeleton(tokens):
+    """Phonetic consonant skeleton: survives transliteration wobble (Rajender/Rajinder,
+    Devanagari round-trips) without pulling in a new dependency."""
+    out = []
+    for t in tokens:
+        if t.isdigit():
+            out.append(t)
+            continue
+        s = _phon(t)
+        if len(s) >= 2:
+            out.append(s)
+    return " ".join(sorted(out))
+
+
 def norm_name(raw):
-    """Return (name_lat, name_core, name_key, legal, native)."""
+    """Return (name_lat, name_core, name_key, name_skel, legal, native)."""
     s = raw if isinstance(raw, str) else ""
     native = _has_native(s)
     s = _fold(s).replace("&", " and ")
     s = _DOT3.sub(r"\1\2\3", s)
-    glued = bool(_TLD.search(s) or _HANDLE.search(s))  # domain / handle / hashtag names lose their spaces
     s = _TLD.sub(" ", s)
     s = _STORE.sub(" ", s)
     toks = []
     for t in _ALNUM.findall(s):
-        if t == "www":
-            continue
         if t.isdigit():
             if len(t) >= 7:  # phone number
                 continue
@@ -146,17 +158,12 @@ def norm_name(raw):
                 toks.append(t.translate(_LEET))
             else:
                 toks.extend(_SPLIT.findall(t))
-    if glued and _VOCAB:
-        exp = []
-        for t in toks:
-            exp.extend(segment(t) if t.isalpha() and len(t) >= 8 and t not in _VOCAB else [t])
-        toks = exp
     if toks and toks[0] == "the":
         toks = toks[1:]
     legal = sorted({LEGAL_CANON[t] for t in toks if t in LEGAL_CANON})
-    core = [t for t in toks if t not in LEGAL_CANON] or toks
+    core = [NAME_CANON.get(t, t) for t in toks if t not in LEGAL_CANON] or toks
     key = sorted(t for t in core if t not in NAME_STOP) or sorted(core)
-    return " ".join(toks), " ".join(core), " ".join(key), " ".join(legal), native
+    return " ".join(toks), " ".join(core), " ".join(key), _skeleton(key), " ".join(legal), native
 
 
 def norm_address(raw):
@@ -199,7 +206,7 @@ def normalize_frame(df, n_jobs=8, chunk=200_000):
             res = [r for part in ex.map(_chunk, parts) for r in part]
     else:
         res = [r for p in parts for r in _chunk(p)]
-    cols = ["name_lat", "name_core", "name_key", "legal", "native", "addr_norm", "nums"]
+    cols = ["name_lat", "name_core", "name_key", "name_skel", "legal", "native", "addr_norm", "nums"]
     out = pd.DataFrame(res, columns=cols, index=df.index)
     out["addr_missing"] = (out["addr_norm"] == "").astype("int8")
     out["native"] = out["native"].astype("int8")
