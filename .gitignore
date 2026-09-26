@@ -5,10 +5,13 @@ student_resource/
 # All reproducible from src/ plus the dataset, and individually up to 2.5GB.
 work/
 work2/
+work3/
 work_v2/
 work_dry/
+work_mini/
 output/
 output_dry/
+output3/
 output2/*
 
 *.tsv
