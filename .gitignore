@@ -8,13 +8,17 @@ work2/
 work_v2/
 work_dry/
 output/
-output2/
 output_dry/
+output2/*
 
 *.tsv
 *.parquet
 *.joblib
 *.log
+
+# Exception: the current submission file is kept in the repo on purpose.
+# candidate_pairs.tsv is NOT (2.5GB, over GitHub's file size limit).
+!output2/matching_results.tsv
 
 # Python
 __pycache__/
