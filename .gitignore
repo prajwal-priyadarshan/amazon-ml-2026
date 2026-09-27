@@ -32,3 +32,5 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+work3_*/
+output3_*/

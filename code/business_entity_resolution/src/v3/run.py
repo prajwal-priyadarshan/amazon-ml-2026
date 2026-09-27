@@ -46,7 +46,8 @@ LEX_NEED = ["addr_norm", "name_lat", "name_core", "name_skel", "name_key",
 FEAT_NEED = ["entity_id", "name_lat", "name_core", "name_key", "name_skel", "legal",
              "native", "addr_norm", "nums", "addr_missing", "name_seg", "seg_key"]
 TEXT_NEED = ["business_name", "business_address"]
-PRUNED_COLS = pairs.LEAN + ["src"] + pairs.RETRIEVAL_COLS + pairs.GROUP_COLS + ["prob1"]
+PRUNE_BLOCK = 4_000_000  # rows scored per matrix in `prune`; bounds the float32 design matrix
+PRUNED_COLS =pairs.LEAN + ["src"] + pairs.RETRIEVAL_COLS + pairs.GROUP_COLS + ["prob1"]
 
 
 # ---------------------------------------------------------------- helpers
@@ -274,10 +275,16 @@ def stage_prune(a, w):
         s1 = _s1(w, a.split, country, FEAT_NEED)
         d = _d(w, a.split, country, src, FEAT_NEED)
         cand = pairs.fill_missing(cand, cols)
-        X = pairs.matrix(cand, s1, d, cols, chunk=a.feat_chunk)
-        cand["prob1"] = gbdt.predict(model, X)
-        del X
-        gc.collect()
+        # Blocks reach 47M pairs once dense retrieval is unioned in; one float32 matrix over
+        # all of them is >10 GB, so score in row blocks and keep only the probabilities.
+        prob1 = np.empty(len(cand), np.float32)
+        for s in range(0, len(cand), PRUNE_BLOCK):
+            e = min(s + PRUNE_BLOCK, len(cand))
+            Xb = pairs.matrix(cand.iloc[s:e], s1, d, cols, chunk=a.feat_chunk)
+            prob1[s:e] = gbdt.predict(model, Xb)
+            del Xb
+            gc.collect()
+        cand["prob1"] = prob1
         n0 = len(cand)
         cand = cand[cand["prob1"].to_numpy() >= a.prune_floor]
         cand = cand.sort_values(["s1_pos", "prob1"], ascending=[True, False])
@@ -659,6 +666,11 @@ def stage_resolve(a, w):
             part = w.p("logs", f"candpart_{country}_{src}.txt")
             if not done(part, a.force):
                 u = pd.read_parquet(p, columns=pairs.LEAN)
+                if scored is not None:
+                    # View-F sibling pairs are added after the union, so a final match can
+                    # sit outside it; the candidate list has to contain every match.
+                    extra = scored.loc[scored["src"] == src, pairs.LEAN]
+                    u = pd.concat([u, extra], ignore_index=True).drop_duplicates()
                 resolve.write_candidate_part(part, len(s1_ids), u["s1_pos"].to_numpy(),
                                              u["d_pos"].to_numpy(), ids_by_src[src])
                 del u
