@@ -48,3 +48,4 @@ work3_*.log
 !output_hybF_all_rm02/matching_results.tsv
 !output11_fr0.1/matching_results.tsv
 !output11_fr0.3/matching_results.tsv
+!output11_fr1.0/matching_results.tsv
