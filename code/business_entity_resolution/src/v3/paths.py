@@ -63,7 +63,7 @@ class Work:
         return self.p("ce", f"{split}_{_slug(country)}_{src}.parquet")
 
     def scored(self, split, country, src):
-        return self.p("scored", f"{split}_{_slug(country)}_{src}.parquet")
+        return self.p(getattr(self, "scored_dir", "scored"), f"{split}_{_slug(country)}_{src}.parquet")
 
     def model(self, name):
         return self.p("models", name)

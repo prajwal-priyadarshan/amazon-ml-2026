@@ -36,9 +36,10 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from .. import textnorm
 from ..data import read_source
 from ..metric import f05_single
-from . import crossenc, dense, diag, gbdt, lexical, pairs, prep, resolve, sibling, train_bi
+from . import crossenc, dense, diag, gbdt, lexical, pairs, prep, refine, resolve, sibling, train_bi
 from .paths import SOURCES, Work, done, log, pool_of
 
 LEX_NEED = ["addr_norm", "name_lat", "name_core", "name_skel", "name_key",
@@ -360,16 +361,18 @@ def stage_train_ce(a, w):
         y = np.concatenate([y, ps["y"].to_numpy(np.float32)])
         log(f"  mixed in {len(ps):,} France pseudo-labelled pairs")
     log(f"cross-encoder training set: {len(y):,} pairs ({int(y.sum()):,} positive)")
-    crossenc.train(w.model("ce"), ta, tb, y, a)
+    init = w.model(a.ce_init) if a.ce_init else None
+    crossenc.train(w.model(a.ce_out), ta, tb, y, a, init_from=init)
 
 
 def stage_ce(a, w):
-    model_dir = w.model("ce")
+    model_dir = w.model(a.ce_out)
     if not os.path.isdir(model_dir):
-        raise SystemExit("no judge at models/ce - run `train-ce` first")
+        raise SystemExit(f"no judge at models/{a.ce_out} - run `train-ce` first")
+    os.makedirs(w.p(a.ce_out), exist_ok=True)
     judge = None
     for country, src in _blocks(w, a.split):
-        out = w.ce(a.split, country, src)
+        out = w.ce(a.split, country, src) if a.ce_out == "ce" else             w.p(a.ce_out, os.path.basename(w.ce(a.split, country, src)))
         if done(out, a.force):
             continue
         p = w.pruned(a.split, country, src)
@@ -478,6 +481,14 @@ def stage_stack(a, w):
         cand = pairs.fill_missing(cand, cols)
         X = pairs.matrix(cand, s1, d, cols, chunk=a.feat_chunk)
         raw = gbdt.predict(model, X)
+        if a.save_feats:
+            os.makedirs(w.p("feats"), exist_ok=True)
+            fx = pd.DataFrame(X, columns=["sf_" + c for c in cols])
+            for c in pairs.LEAN:
+                fx[c] = cand[c].to_numpy()
+            fx["src"] = np.int8(src)
+            fx.to_parquet(w.p("feats", os.path.basename(out)), index=False, compression="zstd")
+            del fx
         del X
         gc.collect()
         cand["prob"] = calib.apply(raw, country)
@@ -557,11 +568,11 @@ def stage_tune(a, w):
     log(f"BEST mode={best[0]} thr={best[1]} margin={best[2]} F0.5={best[3]:.4f}")
     w.write_json({"mode": best[0], "thr": best[1], "margin": best[2],
                   "tuned_f05": best[3], "miss_rate": a.miss_rate, "cap": a.cap,
-                  "split": a.split}, "models", "decision.json")
+                  "split": a.split}, "models", _decision_name(a))
 
 
 def stage_score(a, w):
-    cfg = w.read_json("models", "decision.json") or {"mode": "expected", "thr": 0.0, "margin": 0.0}
+    cfg = w.read_json("models", _decision_name(a)) or {"mode": "expected", "thr": 0.0, "margin": 0.0}
     allv, countries = _score_split(w, a, cfg["mode"], cfg["thr"], cfg["margin"],
                                    cfg.get("miss_rate", a.miss_rate))
     log(f"{a.split.upper()} macro F0.5 = {allv.mean():.4f}  over {len(allv):,} S1 entities")
@@ -577,7 +588,7 @@ def stage_score(a, w):
 
 
 def stage_errors(a, w):
-    cfg = w.read_json("models", "decision.json") or {"mode": "expected", "thr": 0.0, "margin": 0.0}
+    cfg = w.read_json("models", _decision_name(a)) or {"mode": "expected", "thr": 0.0, "margin": 0.0}
     rows = []
     fp_total = 0
     for country in w.countries(a.split):
@@ -633,7 +644,7 @@ def stage_errors(a, w):
 
 
 def stage_resolve(a, w):
-    cfg = w.read_json("models", "decision.json")
+    cfg = w.read_json("models", _decision_name(a))
     if not cfg:
         log("no models/decision.json - falling back to expected-F0.5 with no margin")
         cfg = {"mode": "expected", "thr": 0.0, "margin": 0.0, "miss_rate": a.miss_rate}
@@ -652,6 +663,10 @@ def stage_resolve(a, w):
         for src in SOURCES:
             ids_by_src[src] = prep.load_d(w, a.split, country, src, ["entity_id"])["entity_id"].to_numpy()
         if scored is not None:
+            if a.prior_shift:
+                prior = w.read_json("models", "refine_prior.json")
+                scored["prob"] = refine.prior_shift(scored["prob"].to_numpy(np.float32),
+                                                    prior["pi_train"], country)
             sel = resolve.select(scored, cfg["mode"], cfg["thr"], cfg["margin"],
                                  cfg.get("miss_rate", 0.0), cap=a.cap)
             matches.update(resolve.to_lists(sel, s1_ids, ids_by_src))
@@ -661,6 +676,17 @@ def stage_resolve(a, w):
         cparts = []
         for src in SOURCES:
             p = w.cand("union", a.split, country, src)
+            if a.cand_from == "scored":
+                # the rules ask for the last candidate set before the final model: that is
+                # the pruned (+ sibling-expanded) set every later model scores
+                if scored is None:
+                    continue
+                part = w.p("logs", f"candpart_scored_{country}_{src}.txt")
+                u = scored.loc[scored["src"] == src, pairs.LEAN]
+                resolve.write_candidate_part(part, len(s1_ids), u["s1_pos"].to_numpy(),
+                                             u["d_pos"].to_numpy(), ids_by_src[src])
+                cparts.append(part)
+                continue
             if not os.path.exists(p):
                 continue
             part = w.p("logs", f"candpart_{country}_{src}.txt")
@@ -789,6 +815,207 @@ def stage_train_bi(a, w):
     train_bi.train(w.model("bi"), anchors, positives, negatives, a)
 
 
+def _decision_name(a):
+    """The stacker keeps models/decision.json; every other scored set gets its own file,
+    so tuning a new level never overwrites the decision the previous submission used."""
+    sd = getattr(a, "scored_dir", "scored")
+    return "decision.json" if sd == "scored" else f"decision_{sd}.json"
+
+
+REFINE_TXT = refine.TXT + ["entity_id"]
+
+
+def _refine_path(w, split, country, a=None):
+    tag = "" if a is None or a.refine_out == "scored_r" else f"_{a.refine_out}"
+    return w.p("refine", f"{split}_{country}{tag}.parquet")
+
+
+def _refine_model(a):
+    return "refine.joblib" if a.refine_out == "scored_r" else f"refine_{a.refine_out}.joblib"
+
+
+_VOCAB = None
+
+
+def segment_vocab(w):
+    global _VOCAB
+    if _VOCAB is None:
+        from .segment import load_vocab
+        _VOCAB = load_vocab(w.p("prep", "vocab.json"))
+    return _VOCAB
+
+
+def _s1_table_keys(w, a, split, country):
+    """name_key of every S1 entity in the *whole* S1 table of the split's pool.
+
+    Test scores against all 1.73M test S1, hold-out against a 150k slice of train S1; a
+    count taken inside the split would mean different things on the two. The full train
+    S1 table is the hold-out equivalent of the full test S1 table."""
+    if split == "test":
+        return _s1(w, "test", country, ["name_key"])["name_key"]
+    p = w.p("prep", f"s1keys_train_{country}.parquet")
+    if not os.path.exists(p):
+        raw = read_source(f"{a.data_dir}/train/train_source1.tsv")
+        for c, part in raw.groupby("country"):
+            part = textnorm.normalize_frame(part.reset_index(drop=True), n_jobs=8)
+            part[["name_key", "name_core", "nums", "addr_norm"]].to_parquet(
+                w.p("prep", f"s1keys_train_{c}.parquet"), index=False)
+            log(f"  s1keys_train_{c}: {len(part):,} rows")
+        del raw
+    return pd.read_parquet(p, columns=["name_key"])["name_key"]
+
+
+def stage_refine_feats(a, w):
+    """Cluster / rarity / competition features over the stacker's scored pairs."""
+    os.makedirs(w.p("refine"), exist_ok=True)
+    for country in w.countries(a.split):
+        out = _refine_path(w, a.split, country, a)
+        if done(out, a.force):
+            continue
+        frames = []
+        for src in SOURCES:
+            p = w.p(a.refine_in, os.path.basename(w.scored(a.split, country, src)))
+            if os.path.exists(p):
+                frames.append(pd.read_parquet(p, columns=pairs.LEAN + ["src", "prob"]))
+        if not frames:
+            continue
+        sc = pd.concat(frames, ignore_index=True)
+        fparts = [w.p("feats", os.path.basename(w.scored(a.split, country, src))) for src in SOURCES]
+        if all(os.path.exists(fp) for fp in fparts):
+            fx = pd.concat([pd.read_parquet(fp) for fp in fparts], ignore_index=True)
+            fx = fx.drop(columns=[c for c in ("sf_src",) if c in fx.columns])
+            sc = sc.merge(fx, on=pairs.LEAN + ["src"], how="left")
+            del fx
+        c2 = [w.p("ce2", os.path.basename(w.ce(a.split, country, src))) for src in SOURCES]
+        if a.use_ce2 and all(os.path.exists(x) for x in c2):
+            ce2 = pd.concat([pd.read_parquet(x).assign(src=np.int8(src)) for x, src in zip(c2, SOURCES)],
+                            ignore_index=True).rename(columns={"ce_logit": "ce2_logit"})
+            sc = sc.merge(ce2, on=pairs.LEAN + ["src"], how="left")
+            sc["ce2_run"] = (~sc["ce2_logit"].isna()).astype(np.float32)
+            sc["ce2_logit"] = sc["ce2_logit"].fillna(0.0).astype(np.float32)
+            del ce2
+        s1 = _s1(w, a.split, country, REFINE_TXT)
+        owner = a.split != "test"
+        dmap = {src: _d(w, a.split, country, src, REFINE_TXT, owner=owner) for src in SOURCES}
+        sc = refine.features(sc, s1, dmap, s1_keys=_s1_table_keys(w, a, a.split, country),
+                             vocab=segment_vocab(w))
+        if owner:
+            y = np.zeros(len(sc), np.int8)
+            for src in SOURCES:
+                m = (sc["src"] == src).to_numpy()
+                y[m] = pairs.label(sc[m], s1, dmap[src])
+            sc["y"] = y
+            # records owned by an S1 outside this split: their owner cannot compete here,
+            # while on test every owner is present. Kept, but marked for weighting.
+            hs = set(s1["entity_id"].to_numpy())
+            oth = np.zeros(len(sc), np.int8)
+            for src in SOURCES:
+                m = (sc["src"] == src).to_numpy()
+                ow = dmap[src]["owner"].to_numpy()[sc.loc[m, "d_pos"].to_numpy()]
+                oth[m] = np.array([(o != "") and (o not in hs) for o in ow], np.int8)
+            sc["oth"] = oth
+        sc["country"] = country
+        sc.to_parquet(out, index=False, compression="zstd")
+        log(f"refine-feats {a.split} {country}: {len(sc):,} pairs")
+        del sc, s1, dmap
+        gc.collect()
+
+
+def _refine_write(w, split, df, prob, out_dir="scored_r"):
+    df = df.assign(prob=prob.astype(np.float32))
+    for country, g in df.groupby("country"):
+        for src in SOURCES:
+            gs = g[g["src"] == src]
+            gs[pairs.LEAN + ["src", "prob"]].reset_index(drop=True).to_parquet(
+                w.p(out_dir, os.path.basename(w.scored(split, country, src))),
+                index=False, compression="zstd")
+
+
+def stage_train_refine(a, w):
+    """Cross-fitted on hold-out: the only split no upstream model was trained on."""
+    os.makedirs(w.p(a.refine_out), exist_ok=True)
+    frames = []
+    for si, sp_name in enumerate(a.refine_splits.split(",")):
+        for c in w.countries(sp_name):
+            fp = _refine_path(w, sp_name, c, a)
+            if os.path.exists(fp):
+                frames.append(pd.read_parquet(fp).assign(split=sp_name, split_i=si))
+    df = pd.concat(frames, ignore_index=True)
+    del frames
+    log(f"refine training rows by split: {df['split'].value_counts().to_dict()}")
+    cols = (refine.REFINE_COLS + sorted(c for c in df.columns if c.startswith("sf_"))
+            + [c for c in ("ce2_logit", "ce2_run") if c in df.columns])
+    log(f"refine: {len(cols)} features")
+    X = df[cols].to_numpy(np.float32)
+    y = df["y"].to_numpy(np.int8)
+    cidx = pd.factorize(df["country"])[0].astype(np.uint64)
+    key = (df["s1_pos"].to_numpy().astype(np.uint64) * np.uint64(64) + cidx * np.uint64(4)
+           + df["split_i"].to_numpy().astype(np.uint64))
+    # A real hash: the multiplicative one in _group_of keeps parity, so with a country
+    # offset it would put each country entirely in one fold.
+    h = pd.util.hash_array(key)
+    fold = (h % np.uint64(2)).astype(np.int8)
+    sub = ((h // np.uint64(2)) % np.uint64(10)).astype(np.int8)
+    wt = np.where(df["oth"].to_numpy() == 1, a.oth_weight, 1.0).astype(np.float32)         if "oth" in df.columns else np.ones(len(df), np.float32)
+    oof = np.zeros(len(df), np.float32)
+    iters = []
+    for k in (0, 1):
+        tr = (fold != k) & (sub != 0)
+        va = (fold != k) & (sub == 0)
+        for b in range(a.refine_bags):
+            m = gbdt.fit(X[tr], y[tr], X[va], y[va], name=f"refine fold {k} bag {b}",
+                         n_estimators=5000, leaves=a.refine_leaves, lr=a.refine_lr, min_child=100,
+                         sample_weight=wt[tr], seed=1000 + b)
+            iters.append(getattr(m, "best_iteration_", None) or 500)
+            oof[fold == k] += gbdt.predict(m, X[fold == k]) / a.refine_bags
+        log("  top features: " + gbdt.importances(m, cols))
+    for k in (0, 1):
+        ll = -np.mean(y[fold == k] * np.log(np.clip(oof[fold == k], 1e-6, 1))
+                      + (1 - y[fold == k]) * np.log(np.clip(1 - oof[fold == k], 1e-6, 1)))
+        base = df["prob"].to_numpy()[fold == k]
+        llb = -np.mean(y[fold == k] * np.log(np.clip(base, 1e-6, 1))
+                       + (1 - y[fold == k]) * np.log(np.clip(1 - base, 1e-6, 1)))
+        log(f"  fold {k}: logloss refine {ll:.4f} vs stacker {llb:.4f}")
+    for sp_name, g in df.groupby("split"):
+        _refine_write(w, sp_name, g, oof[g.index.to_numpy()], a.refine_out)
+    n_final = int(np.mean(iters) * 1.1)
+    finals = []
+    for b in range(a.refine_bags):
+        final, _ = gbdt.make_model(n_estimators=n_final, leaves=a.refine_leaves, lr=a.refine_lr,
+                                   min_child=100, seed=1000 + b)
+        final.fit(X, y, sample_weight=wt)
+        finals.append(final)
+    joblib.dump({"models": finals, "cols": cols}, w.model(_refine_model(a)))
+    w.write_json({"pi_train": float(y.mean()), "oof_mean": float(oof.mean()),
+                  "by_country": {c: float(y[df["country"].to_numpy() == c].mean())
+                                 for c in df["country"].unique()}},
+                 "models", "refine_prior.json")
+    log(f"refine: final model {n_final} trees on {len(y):,} rows, pair prior {y.mean():.4f}")
+
+
+def stage_refine(a, w):
+    """Apply the refine model to a split (normally test)."""
+    os.makedirs(w.p(a.refine_out), exist_ok=True)
+    bundle = joblib.load(w.model(_refine_model(a)))
+    for country in w.countries(a.split):
+        p = _refine_path(w, a.split, country, a)
+        if not os.path.exists(p):
+            continue
+        df = pd.read_parquet(p)
+        Xt = df[bundle["cols"]].to_numpy(np.float32)
+        models = bundle.get("models") or [bundle["model"]]
+        prob = np.mean([gbdt.predict(m, Xt) for m in models], axis=0).astype(np.float32)
+        del Xt
+        _refine_write(w, a.split, df, prob, a.refine_out)
+        prior = w.read_json("models", "refine_prior.json") or {}
+        if prior:
+            est = refine.em_prior(prob, prior["pi_train"])
+            log(f"refine {a.split} {country}: {len(df):,} pairs, mean p {prob.mean():.4f}, "
+                f"EM prior {est:.4f} vs train {prior['pi_train']:.4f}")
+        del df
+        gc.collect()
+
+
 STAGES = {
     "prep": stage_prep, "lexical": stage_lexical, "embed": stage_embed, "dense": stage_dense,
     "union": stage_union, "diag": stage_diag, "train-bi": stage_train_bi,
@@ -796,6 +1023,7 @@ STAGES = {
     "ce": stage_ce, "train-stack": stage_train_stack, "stack": stage_stack,
     "tune": stage_tune, "score": stage_score, "errors": stage_errors,
     "resolve": stage_resolve, "pseudo": stage_pseudo,
+    "refine-feats": stage_refine_feats, "train-refine": stage_train_refine, "refine": stage_refine,
 }
 
 
@@ -807,6 +1035,27 @@ def build_parser():
     ap.add_argument("--out", default="../../output3")
     ap.add_argument("--split", default="test", help="fit | holdout | test | all (prep only)")
     ap.add_argument("--force", action="store_true", help="recompute shards that already exist")
+    ap.add_argument("--scored-dir", default="scored",
+                    help="where scored pairs live: 'scored' (stacker) or 'scored_r' (refine)")
+    ap.add_argument("--oth-weight", type=float, default=1.0,
+                    help="train-refine: weight of pairs whose record owner is outside the split")
+    ap.add_argument("--hold2-n", type=int, default=300_000, help="size of the hold2 split")
+    ap.add_argument("--hold3-n", type=int, default=400_000, help="size of the hold3 split")
+    ap.add_argument("--refine-splits", default="holdout",
+                    help="train-refine: comma list of never-trained-on splits to learn from")
+    ap.add_argument("--cand-from", default="scored", choices=["scored", "union"],
+                    help="resolve: candidate_pairs.tsv from the scored (last) set or the retrieval union")
+    ap.add_argument("--refine-leaves", type=int, default=63)
+    ap.add_argument("--refine-bags", type=int, default=1)
+    ap.add_argument("--refine-lr", type=float, default=0.05)
+    ap.add_argument("--ce-out", default="ce", help="judge model dir / score folder name")
+    ap.add_argument("--ce-init", default="", help="train-ce: continue from this model dir")
+    ap.add_argument("--use-ce2", action="store_true", help="refine-feats: merge the second judge")
+    ap.add_argument("--save-feats", action="store_true", help="stack: keep the design matrix")
+    ap.add_argument("--refine-in", default="scored", help="refine: scored set to read")
+    ap.add_argument("--refine-out", default="scored_r", help="refine: scored set to write")
+    ap.add_argument("--prior-shift", action="store_true",
+                    help="resolve: rescale test probabilities to the EM-estimated test prior")
     ap.add_argument("--jobs", type=int, default=8)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--limit-s1", type=int, default=0, help="quick dry run")
@@ -900,6 +1149,8 @@ def build_parser():
 def main():
     a = build_parser().parse_args()
     w = Work(a.work_dir)
+    w.scored_dir = a.scored_dir
+    os.makedirs(w.p(a.scored_dir), exist_ok=True)
     log(f"stage={a.stage} split={a.split} work={w.root}")
     STAGES[a.stage](a, w)
     log(f"stage={a.stage} done")

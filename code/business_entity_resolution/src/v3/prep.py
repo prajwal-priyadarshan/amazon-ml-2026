@@ -127,7 +127,16 @@ def run(a, w):
             rng = np.random.default_rng(a.seed)
             perm = rng.permutation(len(allrows))
             n_fit = int(a.fit_frac * len(allrows))
-            take = perm[:n_fit] if split == "fit" else perm[n_fit:n_fit + a.holdout_n]
+            if split == "fit":
+                take = perm[:n_fit]
+            elif split == "hold2":  # a second never-trained-on sample, disjoint from both
+                lo = n_fit + a.holdout_n
+                take = perm[lo:lo + a.hold2_n]
+            elif split == "hold3":  # a third, after hold2
+                lo = n_fit + a.holdout_n + a.hold2_n
+                take = perm[lo:lo + a.hold3_n]
+            else:
+                take = perm[n_fit:n_fit + a.holdout_n]
             if a.limit_s1:
                 take = take[:a.limit_s1]
             s1 = allrows.iloc[np.sort(take)].reset_index(drop=True)
@@ -137,8 +146,9 @@ def run(a, w):
         del s1
         gc.collect()
 
-    w.write_json({"seed": a.seed, "fit_frac": a.fit_frac, "holdout_n": a.holdout_n},
-                 "prep", "meta.json")
+    if a.split in ("all", "fit", "holdout"):
+        w.write_json({"seed": a.seed, "fit_frac": a.fit_frac, "holdout_n": a.holdout_n},
+                     "prep", "meta.json")
 
 
 def _countries_of(path):

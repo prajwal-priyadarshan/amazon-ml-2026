@@ -49,6 +49,8 @@ def _load(model_name, device, num_labels=1, train=False):
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
     tok = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=num_labels)
+    if train:
+        model.float()  # a saved judge may be stored in fp16; AMP needs fp32 master weights
     model.to(device)
     model.train(train)
     return tok, model

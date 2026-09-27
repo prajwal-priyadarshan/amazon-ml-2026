@@ -22,28 +22,30 @@ from sklearn.isotonic import IsotonicRegression
 from .paths import log
 
 
-def make_model(n_estimators=1500, lr=0.05, leaves=127, min_child=50):
+def make_model(n_estimators=1500, lr=0.05, leaves=127, min_child=50, seed=None):
     try:
         import lightgbm as lgb
         return lgb.LGBMClassifier(
             n_estimators=n_estimators, learning_rate=lr, num_leaves=leaves,
             subsample=0.8, subsample_freq=1, colsample_bytree=0.8,
-            min_child_samples=min_child, max_bin=63, n_jobs=-1, verbose=-1), True
+            min_child_samples=min_child, max_bin=63, n_jobs=-1, verbose=-1,
+            random_state=seed), True
     except Exception:  # missing libomp and the like: still runnable, just slower and weaker
         from sklearn.ensemble import HistGradientBoostingClassifier
         return HistGradientBoostingClassifier(max_iter=500, learning_rate=0.08,
                                               max_leaf_nodes=63, max_bins=63), False
 
 
-def fit(X, y, Xv, yv, name="model", **kw):
+def fit(X, y, Xv, yv, name="model", sample_weight=None, **kw):
+    # kw may carry seed= for bagging; make_model takes it
     model, is_lgb = make_model(**kw)
     if is_lgb:
         import lightgbm as lgb
         stop = [lgb.early_stopping(60, verbose=False)]
         try:  # lightgbm >= 4.7 renamed eval_set to eval_X/eval_y
-            model.fit(X, y, eval_X=Xv, eval_y=yv, callbacks=stop)
+            model.fit(X, y, sample_weight=sample_weight, eval_X=Xv, eval_y=yv, callbacks=stop)
         except TypeError:
-            model.fit(X, y, eval_set=[(Xv, yv)], callbacks=stop)
+            model.fit(X, y, sample_weight=sample_weight, eval_set=[(Xv, yv)], callbacks=stop)
         best = getattr(model, "best_iteration_", None)
         log(f"  {name}: fitted on {len(y):,} rows, best_iteration={best}")
     else:

@@ -1,4 +1,31 @@
-# Business Entity Resolution: phase 1 baseline
+# Business Entity Resolution: final submission (v3 + refine)
+
+The submitted `output/matching_results.tsv` and `output/candidate_pairs.tsv` are produced by the
+v3 pipeline in `src/v3/`, driven by three PowerShell scripts run from this folder:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install --index-url https://download.pytorch.org/whl/cu126 torch==2.14.0
+.\.venv\Scripts\python.exe -m pip install -r requirements-lock.txt
+
+.\tools\run_v3.ps1 -Expand                         # prep, lexical retrieval, tabular cascade      (~6 h)
+.\tools\run_v3_neural.ps1                          # bi-encoder fine-tune, dense retrieval, judge  (~11 h)
+.\tools\run_v3_refine.ps1 -Out ..\..\output        # clean splits, 2nd judge epoch, refine, resolve (~4 h)
+
+.\.venv\Scripts\python.exe ..\..\student_resource\utils\validate_submission.py `
+    --matching ..\..\output\matching_results.tsv --candidate ..\..\output\candidate_pairs.tsv `
+    --test-dir ..\..\student_resource\dataset\test
+```
+
+Every stage is resumable: re-run the same command after a crash. Stage-by-stage details,
+timings and memory notes are in [README_v3.md](README_v3.md), and the method is written up in
+the methodology document. Hardware: 16 GB RAM, RTX 4060 laptop (8 GB VRAM), Python 3.14.
+Models: `intfloat/multilingual-e5-small` (MIT) and `FacebookAI/xlm-roberta-base` (MIT), both
+fine-tuned on the provided training data only, and LightGBM for every tabular model. No
+external data.
+
+---
+
+# (history) Business Entity Resolution: phase 1 baseline
 
 Pipeline: normalise -> multi-view retrieval -> pair features -> GBDT -> isotonic calibration ->
 one-owner assignment -> threshold or expected-F0.5 selection.
