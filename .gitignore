@@ -40,3 +40,4 @@ output3_*/
 submission/
 work3_*.cmd
 work3_*.log
+!output9/matching_results.tsv
