@@ -40,3 +40,9 @@ output3_*/
 submission/
 work3_*.cmd
 work3_*.log
+!output_hybA_France/matching_results.tsv
+!output_hybB_all/matching_results.tsv
+!output_hybC_France90/matching_results.tsv
+!output_hybD_all90/matching_results.tsv
+!output_hybE_rm02/matching_results.tsv
+!output_hybF_all_rm02/matching_results.tsv
