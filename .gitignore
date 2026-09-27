@@ -36,3 +36,7 @@ work3_*/
 output3_*/
 !output4/matching_results.tsv
 !output8/matching_results.tsv
+!output9/matching_results.tsv
+submission/
+work3_*.cmd
+work3_*.log
