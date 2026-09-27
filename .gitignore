@@ -46,3 +46,5 @@ work3_*.log
 !output_hybD_all90/matching_results.tsv
 !output_hybE_rm02/matching_results.tsv
 !output_hybF_all_rm02/matching_results.tsv
+!output11_fr0.1/matching_results.tsv
+!output11_fr0.3/matching_results.tsv
