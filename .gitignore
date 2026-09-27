@@ -57,3 +57,6 @@ work3_*.log
 !output_v11/matching_results.tsv
 !output11/matching_results.tsv
 !/matching_results.tsv
+!output_v12a/matching_results.tsv
+!output_v12b/matching_results.tsv
+!output_v12c/matching_results.tsv
