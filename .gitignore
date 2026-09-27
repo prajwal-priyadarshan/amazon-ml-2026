@@ -49,3 +49,5 @@ work3_*.log
 !output11_fr0.1/matching_results.tsv
 !output11_fr0.3/matching_results.tsv
 !output11_fr1.0/matching_results.tsv
+!output11_IU05/matching_results.tsv
+!output11_IU2/matching_results.tsv
