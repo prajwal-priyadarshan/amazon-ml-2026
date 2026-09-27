@@ -14,7 +14,7 @@ cascade of learned scorers (LightGBM pruner, fine-tuned XLM-R cross-encoder, Lig
 stacker) ranks the candidates. The key final addition is a **cluster-aware refine model
 trained only on entities no upstream model ever saw**. Matches are then chosen per Source-1
 entity by maximising expected F0.5 under a one-owner-per-record constraint. Held-out macro
-F0.5: **0.9860** (open world) / **0.9885** (closed world), see §5.
+F0.5: **0.9862** (open world) / **0.9886** (closed world), see §5.
 
 ---
 
@@ -137,7 +137,7 @@ as free decoys, which is harsher than test. "Closed world" drops them, which is 
 | + fine-tuned bi-encoder retrieval + cross-encoder judge | 0.9776 | — |
 | + refine layer (holdout-trained, cluster features) | 0.9822 | 0.9857 |
 | + full-S1-table rarity, legal-form, IDF, stacker design matrix | 0.9843 | 0.9872 |
-| + two extra clean splits (hold2/hold3), 2nd judge epoch, 3 bags | **0.9860** | **0.9885** |
+| + two extra clean splits (hold2/hold3), 2nd judge epoch, 3 bags | **0.9862** | **0.9886** |
 
 Leave-one-country-out (train refine on US only, score India) costs about 0.0026. This is
 the only available proxy for France.
