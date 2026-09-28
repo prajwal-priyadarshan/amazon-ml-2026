@@ -39,3 +39,8 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# Built submission zip + staging folder (see SUBMISSION.md)
+_submission/
+*_submission.zip
+Documentation_template.md

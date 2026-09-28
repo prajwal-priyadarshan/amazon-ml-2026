@@ -18,7 +18,17 @@ organizers' submission page):
 
 This repo was reorganized for GitHub after the competition closed (flat `src/`, `results/`,
 `docs/`), so that exact layout doesn't exist on disk anymore. Everything needed to rebuild it
-is still here except one file. Four steps:
+is still here except one file.
+
+**Shortcut:** [`tools/build_submission.ps1`](tools/build_submission.ps1) does all four steps
+below in one go (it reads `candidate_pairs.tsv` from `output9\` by default) and writes the zip
+to `submission\`:
+
+```powershell
+.\tools\build_submission.ps1 -TeamName "YourTeam" -Members "Name One, Name Two"
+```
+
+The manual steps:
 
 ## 1. Get `candidate_pairs.tsv`
 

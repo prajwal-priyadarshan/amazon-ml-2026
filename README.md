@@ -71,10 +71,11 @@ stacker, the refine model — was fighting over the remaining 1.3 points.
 
 ```
 ├── README.md                 — you are here
+├── SUBMISSION.md             — how the official submission zip is built
 ├── src/                      — the pipeline
 │   ├── v3/                   — current pipeline: retrieval, cross-encoder, refine, resolve
 │   ├── pipeline.py, ...      — legacy v1/v2 pipeline (still runnable, still the fallback)
-├── tools/                    — run scripts + the official submission validator
+├── tools/                    — run scripts, build_submission.ps1, the official validator
 ├── notebooks/                — self-contained Kaggle notebook (no repo dependency)
 ├── docs/
 │   ├── methodology.md        — the write-up submitted for judging
@@ -106,6 +107,15 @@ covers the lighter v1/v2 fallback, which needs no GPU and no fine-tuning.
 Hardware used: 16 GB RAM, RTX 4060 laptop (8 GB VRAM), Python 3.14. Models:
 `intfloat/multilingual-e5-small` and `FacebookAI/xlm-roberta-base`, both MIT-licensed and
 fine-tuned only on the provided training data — no external data anywhere in the pipeline.
+
+## Building the submission zip
+
+One command assembles `submission\<team>_submission.zip` in the organizers' required layout
+and runs the validator on it (details in [`SUBMISSION.md`](SUBMISSION.md)):
+
+```powershell
+.\tools\build_submission.ps1 -TeamName "YourTeam" -Members "Name One, Name Two"
+```
 
 ## What would have closed the gap
 
