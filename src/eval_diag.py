@@ -4,7 +4,7 @@ Candidate recall is the hard ceiling on the final score, so this measures it dir
 reports the oracle macro F0.5 a perfect classifier could reach on these candidates. No
 feature computation or model scoring, so it is cheap enough to iterate on retrieval.
 
-  python -m src.eval_diag --data-dir ../../student_resource/dataset --limit-s1 150000 --jobs 4
+  python -m src.eval_diag --data-dir student_resource/dataset --limit-s1 150000 --jobs 4
 """
 import argparse
 

@@ -3,7 +3,7 @@
 Aligns matched S1/S2-S3 addresses, looks at the 1-2 token leftovers on each side and keeps
 alphabetic pairs that co-occur far more often than chance. Uses only the provided data.
 
-Usage: python -m src.learn_aliases --data-dir ../../student_resource/dataset --out ../../work/aliases.json
+Usage: python -m src.learn_aliases --data-dir student_resource/dataset --out work/aliases.json
 """
 import argparse
 import json

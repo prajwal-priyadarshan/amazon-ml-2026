@@ -4,6 +4,11 @@
 **Team Members:** [List all team members]
 **Submission Date:** 27 September 2026
 
+> Reproduced verbatim from the methodology write-up submitted for judging. Code paths below
+> (`code/business_entity_resolution/`) reflect the layout required by the submission zip; the
+> repo was reorganized afterward — see the top-level [README](../README.md) for the current
+> layout (`src/`, `tools/`, `results/`).
+
 ---
 
 ## 1. Executive Summary

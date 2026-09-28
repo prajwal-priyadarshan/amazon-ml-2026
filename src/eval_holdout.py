@@ -3,7 +3,7 @@ using the FULL (unsubsampled) S2/S3 universe as the candidate pool -- a much lar
 realistic test of generalisation than the internal held-out split in `pipeline.py train`, which
 only holds out 10% of the already-25%-subsampled universe.
 
-  python -m src.eval_holdout --data-dir ../../student_resource/dataset --work-dir ../../work \
+  python -m src.eval_holdout --data-dir student_resource/dataset --work-dir work \
       --jobs 4 --frac 0.25 --seed 0
 """
 import argparse

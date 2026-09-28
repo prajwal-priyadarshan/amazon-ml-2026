@@ -9,7 +9,7 @@ be exercised end to end in a couple of minutes:
 * test: a slice of the real test files, including France rows, so the unseen-country path
   is exercised too.
 
-    python tools/make_mini_dataset.py --data-dir ../../student_resource/dataset \
+    python tools/make_mini_dataset.py --data-dir student_resource/dataset \
         --out /tmp/mini --n-s1 4000 --decoys 30000
 
 The ground-truth file is rewritten to cover exactly the S1 rows kept, so hold-out scoring

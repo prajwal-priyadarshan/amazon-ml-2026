@@ -1,5 +1,5 @@
 > **Reference, still current.** Measured facts about the data, used by
-> [plan_v3_architecture.md](plan_v3_architecture.md). Build from that plan, not this file.
+> [architecture.md](architecture.md). Build from that plan, not this file.
 
 # Entity Resolution: measured data analysis and v2 plan
 

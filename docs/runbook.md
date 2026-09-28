@@ -1,12 +1,13 @@
 # v3 pipeline — runbook
 
-Implements [docs/plan_v3_architecture.md](../../docs/plan_v3_architecture.md): retrieve →
-rank → resolve, with a fine-tuned bi-encoder retrieval view, a gated cross-encoder judge, a
-sibling graph, and per-S1 expected-F0.5 selection. v2 (`src/pipeline.py`, `work2/`,
-`output2/`) is untouched and still submittable — run v3 into a separate work directory so
-the 0.9547 file stays intact as the safety net.
+Implements [architecture.md](architecture.md): retrieve → rank → resolve, with a fine-tuned
+bi-encoder retrieval view, a gated cross-encoder judge, a sibling graph, and per-S1
+expected-F0.5 selection. v2 (`src/pipeline.py`, see [legacy-v1v2-pipeline.md](legacy-v1v2-pipeline.md))
+is untouched and still submittable — run v3 into a separate work directory so the 0.9547
+baseline stays intact as the safety net (kept at
+[`results/baseline_v2/`](../results/baseline_v2/matching_results.tsv)).
 
-All commands are run from `code/business_entity_resolution/`.
+All commands below are run from the repo root.
 
 ## Install
 
@@ -25,8 +26,8 @@ import, pin `transformers==4.57.6`.
 Every stage on a 4,000-entity slice of the real data, including France:
 
 ```powershell
-.\.venv\Scripts\python.exe tools\make_mini_dataset.py --data-dir ..\..\student_resource\dataset --out ..\..\work_mini\data
-.\tools\run_v3.ps1 -DataDir ..\..\work_mini\data -WorkDir ..\..\work_mini\work -Out ..\..\work_mini\out
+.\.venv\Scripts\python.exe tools\make_mini_dataset.py --data-dir .\student_resource\dataset --out .\work_mini\data
+.\tools\run_v3.ps1 -DataDir .\work_mini\data -WorkDir .\work_mini\work -Out .\work_mini\out
 ```
 
 This is a correctness check, not a measurement: the mini pool is 30k records instead of
@@ -43,8 +44,8 @@ Or stage by stage, which is how it is meant to be driven, because each stage has
 
 ```powershell
 $py = ".\.venv\Scripts\python.exe"
-$D  = "..\..\student_resource\dataset"
-$W  = "..\..\work3"
+$D  = ".\student_resource\dataset"
+$W  = ".\work3"
 
 & $py -m src.v3.run prep        --split all   --data-dir $D --work-dir $W --jobs 8
 & $py -m src.v3.run lexical     --split fit   --data-dir $D --work-dir $W
@@ -111,10 +112,10 @@ re-run `diag` and keep the fine-tune only if recall actually went up.
 ### Validate before submitting
 
 ```powershell
-.\.venv\Scripts\python.exe ..\..\student_resource\utils\validate_submission.py `
-    --matching ..\..\output3\matching_results.tsv `
-    --candidate ..\..\output3\candidate_pairs.tsv `
-    --test-dir ..\..\student_resource\dataset\test
+.\.venv\Scripts\python.exe .\student_resource\utils\validate_submission.py `
+    --matching .\output3\matching_results.tsv `
+    --candidate .\output3\candidate_pairs.tsv `
+    --test-dir .\student_resource\dataset\test
 ```
 
 ## Rough timings on a 16 GB / RTX 4060 laptop

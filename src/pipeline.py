@@ -3,8 +3,8 @@
   multi-view retrieval -> pair features -> stage-1 GBDT -> competition features
   -> stage-2 GBDT -> isotonic calibration -> one-owner -> threshold/margin decision
 
-  python -m src.pipeline train   --data-dir ../../student_resource/dataset --work-dir ../../work2
-  python -m src.pipeline predict --data-dir ../../student_resource/dataset --work-dir ../../work2 --out ../../output2
+  python -m src.pipeline train   --data-dir student_resource/dataset --work-dir work2
+  python -m src.pipeline predict --data-dir student_resource/dataset --work-dir work2 --out output2
 
 Memory notes: every stage that touches the full candidate set is chunked and keeps only
 lean columns, because the full test set is ~11.7M rows on a 16GB machine.

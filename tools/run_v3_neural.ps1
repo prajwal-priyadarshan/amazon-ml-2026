@@ -14,9 +14,9 @@ Run it in a plain PowerShell window. Stops at the first failing stage; prints a 
 that the log parser in work3_run.log also understands.
 #>
 param(
-    [string]$DataDir = "..\..\student_resource\dataset",
-    [string]$WorkDir = "..\..\work3",
-    [string]$Out     = "..\..\output4",
+    [string]$DataDir = ".\student_resource\dataset",
+    [string]$WorkDir = ".\work3",
+    [string]$Out     = ".\output4",
     [string]$Python  = ".\.venv\Scripts\python.exe",
     [string]$Tag     = "e5s-ft",
     [string]$From    = ""

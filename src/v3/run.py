@@ -1,6 +1,6 @@
 """v3 orchestrator. One subcommand per stage, every stage resumable, every stage gated.
 
-    python -m src.v3.run <stage> --data-dir ../../student_resource/dataset --work-dir ../../work3
+    python -m src.v3.run <stage> --data-dir student_resource/dataset --work-dir work3
 
 Stages, in dependency order (see README_v3.md for the runbook and the gate on each one):
 
@@ -1030,9 +1030,9 @@ STAGES = {
 def build_parser():
     ap = argparse.ArgumentParser(description="v3 entity-resolution pipeline")
     ap.add_argument("stage", choices=sorted(STAGES))
-    ap.add_argument("--data-dir", default="../../student_resource/dataset")
-    ap.add_argument("--work-dir", default="../../work3")
-    ap.add_argument("--out", default="../../output3")
+    ap.add_argument("--data-dir", default="student_resource/dataset")
+    ap.add_argument("--work-dir", default="work3")
+    ap.add_argument("--out", default="output3")
     ap.add_argument("--split", default="test", help="fit | holdout | test | all (prep only)")
     ap.add_argument("--force", action="store_true", help="recompute shards that already exist")
     ap.add_argument("--scored-dir", default="scored",

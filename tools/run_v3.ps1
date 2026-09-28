@@ -10,9 +10,9 @@ costs only the shard that died. Long passes belong in a plain PowerShell window:
 Code's background-shell reaper has killed multi-hour runs on this machine.
 #>
 param(
-    [string]$DataDir  = "..\..\student_resource\dataset",
-    [string]$WorkDir  = "..\..\work3",
-    [string]$Out      = "..\..\output3",
+    [string]$DataDir  = ".\student_resource\dataset",
+    [string]$WorkDir  = ".\work3",
+    [string]$Out      = ".\output3",
     [string]$Python   = ".\.venv\Scripts\python.exe",
     [switch]$WithNeural,
     [switch]$Expand,
@@ -79,7 +79,7 @@ foreach ($step in $plan) {
 
 Write-Host ""
 Write-Host "=== validate ===" -ForegroundColor Cyan
-& $Python "..\..\student_resource\utils\validate_submission.py" `
+& $Python ".\student_resource\utils\validate_submission.py" `
     --matching (Join-Path $Out "matching_results.tsv") `
     --candidate (Join-Path $Out "candidate_pairs.tsv") `
     --test-dir (Join-Path $DataDir "test")

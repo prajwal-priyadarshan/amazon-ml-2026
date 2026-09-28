@@ -1,6 +1,6 @@
 > **SUPERSEDED for sequencing — do not build from this.** Written before the v2 hold-out
 > logs existed, so its phase order assumes blocking is the bottleneck; the logs show the
-> classifier is. Follow [plan_v3_architecture.md](plan_v3_architecture.md) instead.
+> classifier is. Follow [../architecture.md](../architecture.md) instead.
 > Still useful as reference: §0.5 (model licences, verified) and §0.6 (the out-of-memory
 > diagnosis — the joblib sparse-broadcast bug and the measured threads fix).
 
@@ -9,7 +9,7 @@
 Execution plan. Sequenced for maximum final score, with a decision gate after every phase so
 that effort is never spent on a stage that the measurements say is not the bottleneck.
 
-Companion document: [data_analysis_v2.md](data_analysis_v2.md) holds the measured evidence
+Companion document: [../data-analysis.md](../data-analysis.md) holds the measured evidence
 that every choice below rests on. This file is the *what to do, in what order*.
 
 ---

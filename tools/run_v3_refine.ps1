@@ -15,9 +15,9 @@ Every stage is resumable. Run it in a plain PowerShell window, and never run the
 validator at the same time: it needs ~8 GB of RAM on the full candidate file.
 #>
 param(
-    [string]$DataDir = "..\..\student_resource\dataset",
-    [string]$WorkDir = "..\..\work3",
-    [string]$Out     = "..\..\output9",
+    [string]$DataDir = ".\student_resource\dataset",
+    [string]$WorkDir = ".\work3",
+    [string]$Out     = ".\output9",
     [string]$Python  = ".\.venv\Scripts\python.exe",
     [string]$Tag     = "e5s-ft",
     [string]$From    = ""

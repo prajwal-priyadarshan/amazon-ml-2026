@@ -1,5 +1,5 @@
 > **SUPERSEDED — do not build from this.** Pre-measurement plan. Follow
-> [plan_v3_architecture.md](plan_v3_architecture.md). Kept for history only.
+> [../architecture.md](../architecture.md). Kept for history only.
 
 # Amazon ML Challenge 2026: Winning Plan (Entity Resolution)
 
