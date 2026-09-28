@@ -1,8 +1,8 @@
-# Competition dataset (shipped separately, far too large for git)
+# Competition dataset (shipped separately by the organizers, far too large for git)
 student_resource/
 
-# Generated pipeline artifacts: candidates, scored blocks, models, submissions, logs.
-# All reproducible from src/ plus the dataset, and individually up to 2.5GB.
+# Generated pipeline artifacts: candidates, scored blocks, models, logs, ad-hoc submissions.
+# All reproducible from src/ + tools/ plus the dataset. Individually up to 2.5GB.
 work/
 work2/
 work3/
@@ -10,18 +10,25 @@ work_v2/
 work_dry/
 work_mini/
 output/
-output_dry/
+output2/
 output3/
-output2/*
+output4/
+output8/
+output9/
+output_dry/
+output_v*/
+output_hyb*/
+submission/
 
 *.tsv
 *.parquet
 *.joblib
 *.log
 
-# Exception: the current submission file is kept in the repo on purpose.
-# candidate_pairs.tsv is NOT (2.5GB, over GitHub's file size limit).
-!output2/matching_results.tsv
+# Exception: the three curated milestone submissions kept in results/ on purpose.
+!results/baseline_v2/matching_results.tsv
+!results/neural_v3/matching_results.tsv
+!results/final_submission/matching_results.tsv
 
 # Python
 __pycache__/
@@ -32,6 +39,8 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local experiment variants (pre-reorg layout)
 work3_*/
 output3_*/
 !output4/matching_results.tsv
@@ -60,3 +69,8 @@ work3_*.log
 !output_v12a/matching_results.tsv
 !output_v12b/matching_results.tsv
 !output_v12c/matching_results.tsv
+
+# Built submission zip + staging folder (see SUBMISSION.md)
+_submission/
+*_submission.zip
+Documentation_template.md

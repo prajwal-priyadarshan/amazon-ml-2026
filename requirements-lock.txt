@@ -1,0 +1,16 @@
+# Exact versions used to produce the final submission (Python 3.14.0, Windows 11, RTX 4060).
+# torch: install the CUDA build first:
+#   pip install --index-url https://download.pytorch.org/whl/cu126 torch==2.14.0
+joblib==1.6.0
+lightgbm==4.7.0
+numpy==2.5.3
+pandas==3.0.6
+pyarrow==25.0.1
+RapidFuzz==3.14.6
+safetensors==0.8.0
+scikit-learn==1.9.1
+scipy==1.18.1
+sentencepiece==0.2.2
+tokenizers==0.23.2
+transformers==5.17.0
+Unidecode==1.4.0

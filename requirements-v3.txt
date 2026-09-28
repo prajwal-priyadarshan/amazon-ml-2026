@@ -1,0 +1,19 @@
+# v3 additions on top of requirements.txt (the tabular pipeline).
+# The tabular stages -- prep, lexical, union, diag, train-prune, prune, train-stack,
+# stack, tune, score, errors, resolve -- need nothing beyond requirements.txt.
+#
+# PyTorch is NOT listed here on purpose: the CPU wheel on PyPI would shadow the CUDA
+# build. Install it from the PyTorch index first, then this file:
+#
+#   pip install --index-url https://download.pytorch.org/whl/cu126 torch
+#   pip install -r requirements-v3.txt
+#
+# (cu126 wheels run fine on a CUDA 13 driver; the driver is backward compatible.)
+
+-r requirements.txt
+
+transformers
+tokenizers
+safetensors
+sentencepiece   # XLM-R family tokenizers
+protobuf        # only needed when a tokenizer has to be converted from its slow form
