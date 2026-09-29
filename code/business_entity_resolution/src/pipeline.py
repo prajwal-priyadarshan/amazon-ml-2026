@@ -362,7 +362,10 @@ def main():
     ap.add_argument("cmd", choices=["train", "predict"])
     ap.add_argument("--data-dir", required=True)
     ap.add_argument("--work-dir", default="work")
-    ap.add_argument("--out", default="output")
+    # NOTE: default was "output" until the Sep 2026 restructure; that path is now the
+    # tracked official submission deliverable (output/matching_results.tsv + candidate_pairs.tsv).
+    # Renamed the legacy default so a bare `pipeline.py predict` run can't clobber it.
+    ap.add_argument("--out", default="output_legacy")
     ap.add_argument("--aliases", default=None)
     ap.add_argument("--frac", type=float, default=0.5)
     ap.add_argument("--fit-s1", type=int, default=200_000,

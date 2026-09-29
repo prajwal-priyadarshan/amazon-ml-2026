@@ -8,8 +8,14 @@ Kept as [`results/baseline_v2/`](../results/baseline_v2/matching_results.tsv).
 Pipeline: normalise -> multi-view retrieval -> pair features -> GBDT -> isotonic calibration ->
 one-owner assignment -> threshold or expected-F0.5 selection.
 
-All paths below are relative to the repo root. Generated files go to `work/` and `output/`,
-never into `student_resource/`.
+All paths below are relative to the repo root. Generated files go to `work/` and
+`output_legacy/`, never into `student_resource/`. (`output/` itself is reserved — it's the
+tracked official submission deliverable, see [`SUBMISSION.md`](../SUBMISSION.md).)
+
+`src/` now lives at [`code/business_entity_resolution/src/`](../code/business_entity_resolution/src/)
+(the official submission layout), so `-m src.pipeline ...` needs that directory on the import
+path first: `$env:PYTHONPATH = "code\business_entity_resolution"` (PowerShell) or
+`export PYTHONPATH=code/business_entity_resolution` (bash).
 
 ## Setup
 ```bash
@@ -33,13 +39,14 @@ python -m src.pipeline preprocess --data-dir student_resource/dataset --work-dir
 python -m src.pipeline train --data-dir student_resource/dataset --work-dir work \
     --aliases work/aliases.json --frac 0.25 --jobs 16
 
-# 4. predict the full test set and write both TSVs
+# 4. predict the full test set and write both TSVs (output_legacy/ is the default --out now;
+#    "output" is reserved for the official submission deliverable)
 python -m src.pipeline predict --data-dir student_resource/dataset --work-dir work \
-    --out output --jobs 16
+    --out output_legacy --jobs 16
 
 # 5. validate
 python3 student_resource/utils/validate_submission.py \
-    --matching output/matching_results.tsv --candidate output/candidate_pairs.tsv \
+    --matching output_legacy/matching_results.tsv --candidate output_legacy/candidate_pairs.tsv \
     --test-dir student_resource/dataset/test
 ```
 Use `--limit-s1 5000` on either command for a quick dry run.

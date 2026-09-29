@@ -60,7 +60,7 @@ rationale it was built from).
 | v3 (neural) | + fine-tuned multilingual e5-small bi-encoder retrieval, XLM-R cross-encoder judge | **0.9776** — kept at [`results/neural_v3/`](results/neural_v3/) |
 | v3 + refine | + cluster-aware refine model trained on held-out splits | 0.9822 |
 | v3 + refine, full matrix | + full-S1-table name rarity, legal-form and IDF features | 0.9843 |
-| **final** | + two extra clean splits, a second judge epoch, 3-seed bagging | **0.9862 / 0.9886** (open/closed) — **portal 0.985018**, kept at [`results/final_submission/`](results/final_submission/) |
+| **final** | + two extra clean splits, a second judge epoch, 3-seed bagging | **0.9862 / 0.9886** (open/closed) — **portal 0.985018**, kept at [`output/`](output/) |
 
 The single biggest lever was retrieval: fine-tuning the bi-encoder on the competition's own
 matches (InfoNCE with mined hard negatives) lifted pair recall from 93.2% to 99.6% and moved
@@ -69,12 +69,18 @@ stacker, the refine model — was fighting over the remaining 1.3 points.
 
 ## Repo layout
 
+Repo root matches the exact `<team>_submission.zip` layout the organizers require (see
+[`SUBMISSION.md`](SUBMISSION.md)), plus the supporting docs/history around it:
+
 ```
 ├── README.md                 — you are here
-├── SUBMISSION.md             — how the official submission zip is built
-├── src/                      — the pipeline
-│   ├── v3/                   — current pipeline: retrieval, cross-encoder, refine, resolve
-│   ├── pipeline.py, ...      — legacy v1/v2 pipeline (still runnable, still the fallback)
+├── SUBMISSION.md             — how the official submission zip is built (now: just zip this repo)
+├── Documentation_template.md — the filled-in methodology write-up, exact required filename
+├── output/                   — the official deliverable: matching_results.tsv + candidate_pairs.tsv
+├── code/business_entity_resolution/
+│   ├── src/                  — the pipeline (same code as below, required path for judging)
+│   ├── README.md             — reproduction instructions (copy of docs/runbook.md)
+│   └── requirements.txt      — pinned dependencies
 ├── tools/                    — run scripts, build_submission.ps1, the official validator
 ├── notebooks/                — self-contained Kaggle notebook (no repo dependency)
 ├── docs/
@@ -85,10 +91,13 @@ stacker, the refine model — was fighting over the remaining 1.3 points.
 │   ├── legacy-v1v2-pipeline.md — how to run the v1/v2 fallback
 │   ├── problem_statement.pdf — the organizers' original problem statement
 │   └── plans/                — earlier, superseded planning documents, kept for history
-├── results/                  — three milestone submissions (see results/README.md)
+├── results/                  — two earlier milestone submissions (baseline_v2, neural_v3)
 ├── archive/final-day-run-log/ — the literal commands run in the last hours before the deadline
 └── student_resource/         — organizer-provided dataset + validator (not tracked; see below)
 ```
+
+`code/business_entity_resolution/src/` is the pipeline's one copy — nothing under `code/` is
+duplicated elsewhere in the repo.
 
 ## Reproducing it
 

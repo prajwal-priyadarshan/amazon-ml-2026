@@ -9,7 +9,6 @@ work3/
 work_v2/
 work_dry/
 work_mini/
-output/
 output2/
 output3/
 output4/
@@ -25,10 +24,15 @@ submission/
 *.joblib
 *.log
 
-# Exception: the three curated milestone submissions kept in results/ on purpose.
+# Exception: the two remaining curated milestone submissions kept in results/ on purpose.
+# (final_submission's matching_results.tsv now lives at output/ — the official submission layout.)
 !results/baseline_v2/matching_results.tsv
 !results/neural_v3/matching_results.tsv
-!results/final_submission/matching_results.tsv
+
+# Exception: the official submission deliverable (repo root now matches the required
+# <team>_submission.zip layout — see SUBMISSION.md).
+!output/matching_results.tsv
+!output/candidate_pairs.tsv
 
 # Python
 __pycache__/
@@ -73,4 +77,3 @@ work3_*.log
 # Built submission zip + staging folder (see SUBMISSION.md)
 _submission/
 *_submission.zip
-Documentation_template.md

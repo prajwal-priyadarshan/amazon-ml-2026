@@ -24,6 +24,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# Sep 2026 restructure: src/ now lives under code/business_entity_resolution/ (the official
+# submission layout). Put it on the import path so `-m src.v3.run` still resolves from repo root.
+$env:PYTHONPATH = Join-Path (Split-Path $PSScriptRoot -Parent) "code/business_entity_resolution"
 $env:PYTHONUNBUFFERED = "1"
 $R = "scored_r10"
 

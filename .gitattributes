@@ -1,3 +1,4 @@
 # Submission files must round-trip byte-for-byte. Without this, git rewrites LF to CRLF
 # on checkout under Windows and the file no longer matches what was validated.
 *.tsv -text
+output/candidate_pairs.tsv filter=lfs diff=lfs merge=lfs -text

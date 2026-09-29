@@ -2,22 +2,12 @@
 
 Implements [architecture.md](architecture.md): retrieve → rank → resolve, with a fine-tuned
 bi-encoder retrieval view, a gated cross-encoder judge, a sibling graph, and per-S1
-expected-F0.5 selection. v2 (`code/business_entity_resolution/src/pipeline.py`, see
-[legacy-v1v2-pipeline.md](legacy-v1v2-pipeline.md))
+expected-F0.5 selection. v2 (`src/pipeline.py`, see [legacy-v1v2-pipeline.md](legacy-v1v2-pipeline.md))
 is untouched and still submittable — run v3 into a separate work directory so the 0.9547
 baseline stays intact as the safety net (kept at
 [`results/baseline_v2/`](../results/baseline_v2/matching_results.tsv)).
 
-All commands below are run from the repo root. `src/` itself now lives at
-[`code/business_entity_resolution/src/`](../code/business_entity_resolution/src/) (the official
-submission layout — see [`SUBMISSION.md`](../SUBMISSION.md)), so `-m src.v3.run ...` needs that
-directory on the import path first:
-
-```powershell
-$env:PYTHONPATH = "code\business_entity_resolution"
-```
-
-(`tools\run_v3*.ps1` already set this for you.)
+All commands below are run from the repo root.
 
 ## Install
 
