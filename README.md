@@ -1,5 +1,26 @@
 # Business Entity Resolution — Amazon ML Challenge 2026
 
+<p align="center">
+  <img src="https://img.shields.io/badge/Macro_F0.5-0.9862-2ea44f?style=for-the-badge&logo=target&logoColor=white" alt="Macro F0.5">
+  <img src="https://img.shields.io/badge/Portal_Score-0.985018-FF9900?style=for-the-badge&logo=kaggle&logoColor=white" alt="Portal score">
+  <img src="https://img.shields.io/badge/Rank-%23525-232F3E?style=for-the-badge&logo=speedtest&logoColor=white" alt="Rank 525">
+  <img src="https://img.shields.io/badge/Rows-24.2M-blue?style=for-the-badge&logo=databricks&logoColor=white" alt="24.2M rows">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/PyTorch-EE4C2C?style=flat-square&logo=pytorch&logoColor=white" alt="PyTorch">
+  <img src="https://img.shields.io/badge/Hugging_Face-FFD21E?style=flat-square&logo=huggingface&logoColor=black" alt="Hugging Face">
+  <img src="https://img.shields.io/badge/LightGBM-02569B?style=flat-square" alt="LightGBM">
+  <img src="https://img.shields.io/badge/scikit--learn-F7931E?style=flat-square&logo=scikitlearn&logoColor=white" alt="scikit-learn">
+  <img src="https://img.shields.io/badge/pandas-150458?style=flat-square&logo=pandas&logoColor=white" alt="pandas">
+  <img src="https://img.shields.io/badge/NumPy-013243?style=flat-square&logo=numpy&logoColor=white" alt="NumPy">
+  <img src="https://img.shields.io/badge/SciPy-8CAAE6?style=flat-square&logo=scipy&logoColor=white" alt="SciPy">
+  <img src="https://img.shields.io/badge/NVIDIA_CUDA-76B900?style=flat-square&logo=nvidia&logoColor=white" alt="CUDA">
+  <img src="https://img.shields.io/badge/Kaggle-20BEFF?style=flat-square&logo=kaggle&logoColor=white" alt="Kaggle">
+  <img src="https://img.shields.io/badge/Made_at-Amrita_Vishwa_Vidyapeetham-B4163C?style=flat-square" alt="Amrita">
+</p>
+
 > Retrieve → rank → resolve: a three-generation entity-resolution pipeline matching
 > **1.7M business records against ~10M noisy candidates** with no subsampling.
 
@@ -22,7 +43,7 @@ competition closed for anyone who wants to read or rerun it.
 
 ---
 
-## The task
+## <img src="https://cdn.simpleicons.org/target/FF9900" height="26" align="absmiddle"> The task
 
 Given a deduplicated reference table **S1** (a business name, an address, a country), find
 every record in two large, noisy pools **S2** and **S3** that describes the same business.
@@ -34,7 +55,7 @@ Scale: **24,229,173 rows** normalized once. The test split alone is 1,732,544 S1
 matched against 9,969,589 pool records — no subsampling anywhere, because a subsampled
 negative pool reads a few points high and doesn't survive contact with the real leaderboard.
 
-## The approach: retrieve → rank → resolve
+## <img src="https://cdn.simpleicons.org/pytorch/EE4C2C" height="26" align="absmiddle"> The approach: retrieve → rank → resolve
 
 ```
  S1 × (S2 ∪ S3)        RETRIEVE              PRUNE               JUDGE               RESOLVE
@@ -62,7 +83,7 @@ Full write-up: [`docs/methodology.md`](docs/methodology.md) (the methodology doc
 submitted for judging) and [`docs/architecture.md`](docs/architecture.md) (the design
 rationale it was built from).
 
-## The score, generation by generation
+## <img src="https://cdn.simpleicons.org/chartdotjs/FF6384" height="26" align="absmiddle"> The score, generation by generation
 
 | generation | what changed | held-out macro F0.5 |
 |---|---|---|
@@ -79,7 +100,7 @@ matches (InfoNCE with mined hard negatives) lifted pair recall from 93.2% to 99.
 the oracle ceiling from 0.974 to 0.999. Everything downstream of that — the judge, the
 stacker, the refine model — was fighting over the remaining 1.3 points.
 
-## Leaderboard climb
+## <img src="https://cdn.simpleicons.org/speedtest/FF9900" height="26" align="absmiddle"> Leaderboard climb
 
 | | |
 |---|---|
@@ -99,7 +120,7 @@ land late improvements.
 
 *Screenshot from the Amazon ML Challenge Explorer (amazonmlchallengeexplorer.vercel.app).*
 
-## Repo layout
+## <img src="https://cdn.simpleicons.org/git/F05032" height="26" align="absmiddle"> Repo layout
 
 Repo root matches the exact `<team>_submission.zip` layout the organizers require (see
 [`SUBMISSION.md`](SUBMISSION.md)), plus the supporting docs/history around it:
@@ -131,7 +152,7 @@ Repo root matches the exact `<team>_submission.zip` layout the organizers requir
 `code/business_entity_resolution/src/` is the pipeline's one copy — nothing under `code/` is
 duplicated elsewhere in the repo.
 
-## Reproducing it
+## <img src="https://cdn.simpleicons.org/python/3776AB" height="26" align="absmiddle"> Reproducing it
 
 The dataset (`student_resource/`) is provided by the competition organizers and isn't
 tracked in this repo. Drop it in at the repo root, then:
@@ -149,7 +170,7 @@ Hardware used: 16 GB RAM, RTX 4060 laptop (8 GB VRAM), Python 3.14. Models:
 `intfloat/multilingual-e5-small` and `FacebookAI/xlm-roberta-base`, both MIT-licensed and
 fine-tuned only on the provided training data — no external data anywhere in the pipeline.
 
-## Building the submission zip
+## <img src="https://cdn.simpleicons.org/gnubash/4EAA25" height="26" align="absmiddle"> Building the submission zip
 
 One command assembles `submission\<team>_submission.zip` in the organizers' required layout
 and runs the validator on it (details in [`SUBMISSION.md`](SUBMISSION.md)):
@@ -158,7 +179,7 @@ and runs the validator on it (details in [`SUBMISSION.md`](SUBMISSION.md)):
 .\tools\build_submission.ps1 -TeamName "YourTeam" -Members "Name One, Name Two"
 ```
 
-## What would have closed the gap
+## <img src="https://cdn.simpleicons.org/scikitlearn/F7931E" height="26" align="absmiddle"> What would have closed the gap
 
 Rank #525 with a 0.985 holdout-consistent score means the top of the leaderboard found
 something structural this pipeline didn't. The honest gaps, in order of size:
@@ -180,13 +201,10 @@ for the full error taxonomy.
 
 ---
 
-## Team
+## <img src="https://cdn.simpleicons.org/github/181717" height="26" align="absmiddle"> Team
 
 Built by **Team Wizards** (Amrita Vishwa Vidyapeetham) for the Amazon ML Challenge 2026.
 
-| Member | GitHub |
-|---|---|
-| Prajwal Priyadarshan | [@prajwal-priyadarshan](https://github.com/prajwal-priyadarshan) |
-| Kesav Satya Sai Nimmagadda | [@kesavvvvvv](https://github.com/kesavvvvvv) |
-| Kishore B | [@KishoreB25](https://github.com/KishoreB25) |
-| Kabilan K | [@KKabilan07](https://github.com/KKabilan07) |
+| | | | |
+|:---:|:---:|:---:|:---:|
+| <a href="https://github.com/prajwal-priyadarshan"><img src="https://github.com/prajwal-priyadarshan.png?size=120" width="100" alt="Prajwal Priyadarshan"></a><br>**Prajwal Priyadarshan**<br>[@prajwal-priyadarshan](https://github.com/prajwal-priyadarshan) | <a href="https://github.com/kesavvvvvv"><img src="https://github.com/kesavvvvvv.png?size=120" width="100" alt="Kesav Satya Sai Nimmagadda"></a><br>**Kesav Satya Sai Nimmagadda**<br>[@kesavvvvvv](https://github.com/kesavvvvvv) | <a href="https://github.com/KishoreB25"><img src="https://github.com/KishoreB25.png?size=120" width="100" alt="Kishore B"></a><br>**Kishore B**<br>[@KishoreB25](https://github.com/KishoreB25) | <a href="https://github.com/KKabilan07"><img src="https://github.com/KKabilan07.png?size=120" width="100" alt="Kabilan K"></a><br>**Kabilan K**<br>[@KKabilan07](https://github.com/KKabilan07) |
