@@ -60,7 +60,7 @@ python3 tools/validate_submission.py \
 ```
 
 `PASS` means it's safe to upload. `output/matching_results.tsv` is the file that was already
-scored on the leaderboard (0.985018, rank #568) — this confirms your working copy matches
+scored on the leaderboard (0.985018, rank #525) — this confirms your working copy matches
 byte-for-byte and `candidate_pairs.tsv` is well-formed.
 
 ## Background

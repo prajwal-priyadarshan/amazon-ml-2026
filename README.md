@@ -1,13 +1,24 @@
 # Business Entity Resolution — Amazon ML Challenge 2026
 
-**Portal score: 0.985018 · Rank #568** (final submission, night of 27→28 Sep 2026)
-**Held-out macro F0.5: 0.9862** (open world) **/ 0.9886** (closed world)
+> Retrieve → rank → resolve: a three-generation entity-resolution pipeline matching
+> **1.7M business records against ~10M noisy candidates** with no subsampling.
+
+| | |
+|---|---|
+| **Portal score** | **0.985018** · Rank **#525** (final submission, night of 27→28 Sep 2026) |
+| **Held-out macro F0.5** | **0.9862** open world · **0.9886** closed world |
+| **Scale** | 24,229,173 rows normalized · 202M candidate pairs retrieved |
+
+**Contents:** [The task](#the-task) · [Approach](#the-approach-retrieve--rank--resolve) ·
+[Scores](#the-score-generation-by-generation) · [Leaderboard climb](#leaderboard-climb) · [Repo layout](#repo-layout) ·
+[Reproducing](#reproducing-it) · [Submission zip](#building-the-submission-zip) ·
+[What would have closed the gap](#what-would-have-closed-the-gap) · [Team](#team)
 
 We didn't win this one, but the pipeline got within striking distance of the best public
-numbers for the challenge, and the road there — three architecture generations in five
-days, a 24-million-row dataset, and a cluster-aware refine model built the night before the
+numbers for the challenge. The road there — three architecture generations in five days, a
+24-million-row dataset, and a cluster-aware refine model built the night before the
 deadline — is worth keeping around. This repo is that pipeline, reorganized after the
-competition closed for anyone (including future-us) who wants to read or rerun it.
+competition closed for anyone who wants to read or rerun it.
 
 ---
 
@@ -26,16 +37,17 @@ negative pool reads a few points high and doesn't survive contact with the real 
 ## The approach: retrieve → rank → resolve
 
 ```
-                 ┌─────────────┐     ┌──────────────┐     ┌───────────────┐     ┌──────────────┐
- S1 × (S2 ∪ S3)  │   RETRIEVE  │ --> │     PRUNE     │ --> │     JUDGE     │ --> │    RESOLVE   │
- ~24M records     │  5 sparse   │     │  LightGBM    │     │ XLM-R cross-  │     │ per-S1 expec-│
-                 │  views +    │     │  keeps top 8 │     │ encoder judge │     │ ted-F0.5 pick,│
-                 │  fine-tuned │     │  per S1/src, │     │ (gated on the │     │ one-owner-per-│
-                 │  e5-small   │     │  sibling     │     │ uncertain     │     │ record, then a│
-                 │  bi-encoder │     │  expansion   │     │ band) + stack │     │ cluster-aware │
-                 │             │     │              │     │ + refine      │     │ refine pass   │
-                 └─────────────┘     └──────────────┘     └───────────────┘     └──────────────┘
-   ~202M candidate pairs         9.2M pairs survive         calibrated probability      final matches
+ S1 × (S2 ∪ S3)        RETRIEVE              PRUNE               JUDGE               RESOLVE
+  ~24M records     ┌───────────────┐   ┌───────────────┐   ┌─────────────────┐   ┌─────────────────┐
+ ───────────────►  │ 5 sparse views│──►│ LightGBM keeps│──►│ XLM-R cross-    │──►│ per-S1 expected │
+                   │ + fine-tuned  │   │ top 8 per     │   │ encoder judge   │   │ F0.5 pick, one  │
+                   │ e5-small      │   │ S1/source,    │   │ (uncertain band)│   │ owner per       │
+                   │ bi-encoder    │   │ sibling       │   │ + stacker       │   │ record, then a  │
+                   │               │   │ expansion     │   │ + refine        │   │ cluster-aware   │
+                   │               │   │               │   │                 │   │ refine pass     │
+                   └───────────────┘   └───────────────┘   └─────────────────┘   └─────────────────┘
+                     ~202M pairs         9.2M pairs          calibrated             final matches
+                                         survive             probabilities
 ```
 
 The last piece is the one that mattered most: a **cluster-aware refine model trained only
@@ -66,6 +78,26 @@ The single biggest lever was retrieval: fine-tuning the bi-encoder on the compet
 matches (InfoNCE with mined hard negatives) lifted pair recall from 93.2% to 99.6% and moved
 the oracle ceiling from 0.974 to 0.999. Everything downstream of that — the judge, the
 stacker, the refine model — was fighting over the remaining 1.3 points.
+
+## Leaderboard climb
+
+| | |
+|---|---|
+| **Final rank** | **#525** at score **0.985018** (Sep 28, 12:04 AM checkpoint) |
+| **Net movement** | **+550 ranks** over 18 recorded leaderboard checkpoints |
+| **Starting point** | ~#1,080 on the afternoon of 26 Sep |
+| **Low point** | ~#1,900 shortly after midnight on 27 Sep |
+| **Peak** | ~#290 during the evening of 27 Sep (roughly 5–9 PM) |
+
+The trajectory had three phases: an early dip to about #1,900 in the first hours of 27 Sep,
+a steep recovery through the day to around #600, and a jump into the top ~300 by the
+evening. From there the rank drifted back to #525 by the final checkpoint even though our
+score held steady, which is what a still-moving leaderboard looks like when other teams
+land late improvements.
+
+![Rank timeline across 18 leaderboard checkpoints, ending at rank #525 with score 0.985018](docs/assets/leaderboard-rank-timeline.png)
+
+*Screenshot from the Amazon ML Challenge Explorer (amazonmlchallengeexplorer.vercel.app).*
 
 ## Repo layout
 
@@ -128,7 +160,7 @@ and runs the validator on it (details in [`SUBMISSION.md`](SUBMISSION.md)):
 
 ## What would have closed the gap
 
-Rank #568 with a 0.985 holdout-consistent score means the top of the leaderboard found
+Rank #525 with a 0.985 holdout-consistent score means the top of the leaderboard found
 something structural this pipeline didn't. The honest gaps, in order of size:
 
 - **France got zero-shot treatment.** It's 15% of the test set, entirely unlabeled, and
@@ -145,3 +177,16 @@ something structural this pipeline didn't. The honest gaps, in order of size:
 See [`docs/plans/03-final-day-plan.md`](docs/plans/03-final-day-plan.md) for the plan this
 was measured against on the last day, and [`docs/methodology.md`](docs/methodology.md) §5
 for the full error taxonomy.
+
+---
+
+## Team
+
+Built by **Team Wizards** (Amrita Vishwa Vidyapeetham) for the Amazon ML Challenge 2026.
+
+| Member | GitHub |
+|---|---|
+| Prajwal Priyadarshan | [@prajwal-priyadarshan](https://github.com/prajwal-priyadarshan) |
+| Kesav Satya Sai Nimmagadda | [@kesavvvvvv](https://github.com/kesavvvvvv) |
+| Kishore B | [@KishoreB25](https://github.com/KishoreB25) |
+| Kabilan K | [@KKabilan07](https://github.com/KKabilan07) |
